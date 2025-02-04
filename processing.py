@@ -5,7 +5,7 @@ from sklearn.decomposition import PCA, TruncatedSVD
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import minimize
 from scipy.interpolate import interp1d
-from pmagpy import ipmag, pmag
+#from pmagpy import ipmag, pmag
 import pickle, base64
 
 
