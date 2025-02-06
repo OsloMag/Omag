@@ -5,7 +5,11 @@ from sklearn.decomposition import PCA, TruncatedSVD
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import minimize
 from scipy.interpolate import interp1d
+<<<<<<< HEAD
+#from pmagpy import ipmag, pmag   ### Commented out for now b/c now easy to support through Binder
+=======
 #from pmagpy import ipmag, pmag
+>>>>>>> c9aded43cb63827f08c613a354efb3e2bda1cdaa
 import pickle, base64
 
 
@@ -55,19 +59,105 @@ def import_jr6(filename):
     
     return df
 
-def deserialize(df):
-    """
-    recovers data saved in a serialized format
-    """
 
-    df['coefficients'] = df['coefficients'].apply(lambda x: np.array(pickle.loads(base64.b64decode(x))))
-    df['treatment'] = df['treatment'].apply(lambda x: np.array(pickle.loads(base64.b64decode(x))))
-    df['gcpts_s'] = df['gcpts_s'].apply(lambda x: pickle.loads(base64.b64decode(x)))
-    df['gcpts_g'] = df['gcpts_g'].apply(lambda x: pickle.loads(base64.b64decode(x)))
-    df['gcpts_t'] = df['gcpts_t'].apply(lambda x: pickle.loads(base64.b64decode(x)))
+def process_pkl(data_dict):
+
+    Ds, Is, Dg, Ig, Dt, It, gcs, gcg, gct = [[] for _ in range(9)]
+    spec, comp, fit_type, n, from_treat, to_treat, mad, demag, coefficients, treatment, segments = [[] for _ in range(11)]
+    
+    for key, sub_dict in data_dict.items():
+        #for subkey, elem in sub_dict.items():
+
+        merged_coeffs = sub_dict['coefficients_norm'] if 'coefficients_norm' in sub_dict and isinstance(sub_dict['coefficients_norm'], list) and sub_dict['coefficients_norm'] else None
+        if merged_coeffs is not None: split_coeffs = list(zip(*merged_coeffs))
+        else: split_coeffs = None
+
+        if isinstance(sub_dict['filtered'], pd.DataFrame):
+            treatment_steps = sub_dict['filtered']['treatment'].values
+    
+        if 'lines' in sub_dict:               
+            for i, line in enumerate(sub_dict['lines']):
+                lfit = line[2]
+                dirs = line[5]
+                coordinates = line[8]
+                DI_s, DI_g, DI_t = collect_alt_dirs(dirs, coordinates, lfit['az'].iloc[0], lfit['hade'].iloc[0], lfit['bed_dip_dir'].iloc[0], lfit['bed_dip'].iloc[0])
+                Ds.append(DI_s[0][0])
+                Is.append(DI_s[0][1])
+                Dg.append(DI_g[0][0])
+                Ig.append(DI_g[0][1])
+                Dt.append(DI_t[0][0])
+                It.append(DI_t[0][1])
+                gcs.append(None)
+                gcg.append(None)
+                gct.append(None)
+
+                spec.append(key)
+                comp.append(line[1])
+                fit_type.append(line[0])
+                n.append(len(line))
+                mad.append(line[6])
+                
+                from_treat.append(lfit['treatment'].iloc[0])
+                to_treat.append(lfit['treatment'].iloc[-1])
+                treatment.append(treatment_steps)
+                
+                demag_treat = lfit['demag'].astype(str)
+                if demag_treat.str.contains('TH').any():
+                    demag_type  = 'TH'
+                else: demag_type = 'AF'
+                demag.append(demag_type)
+
+                if split_coeffs is None:
+                    print (f'The number of line fits and coefficient arrays does not match for {key}; not passing any coefficients')
+                    coefficients.append(None)
+                elif len(split_coeffs) != len(sub_dict['lines']):
+                    print (f'The number of line fits and coefficient arrays does not match for {key}; not passing any coefficients')
+                    coefficients.append(None)
+                else:
+                    coefficients.append(np.array(split_coeffs[i]))
+
+        if 'planes' in sub_dict:
+            for i, plane in enumerate(sub_dict['planes']):
+                
+                gcfit = plane[2]
+                dirs = plane[5]
+                coordinates = plane[8]
+                DI_s, DI_g, DI_t = collect_alt_dirs(dirs, coordinates, gcfit['az'].iloc[0], gcfit['hade'].iloc[0], gcfit['bed_dip_dir'].iloc[0], gcfit['bed_dip'].iloc[0])
+                Ds.append(DI_s[0][0])
+                Is.append(DI_s[0][1])
+                Dg.append(DI_g[0][0])
+                Ig.append(DI_g[0][1])
+                Dt.append(DI_t[0][0])
+                It.append(DI_t[0][1])
+                gcpts_s, gcpts_g, gcpts_t = collect_alt_dirs(plane[7], coordinates, gcfit['az'].iloc[0], gcfit['hade'].iloc[0], gcfit['bed_dip_dir'].iloc[0], gcfit['bed_dip'].iloc[0])
+                gcs.append(gcpts_s)
+                gcg.append(gcpts_g)
+                gct.append(gcpts_t)    
+
+                spec.append(key)
+                comp.append(plane[1])
+                fit_type.append(plane[0])
+                n.append(len(plane))
+                mad.append(plane[6])
+                
+                from_treat.append(gcfit['treatment'].iloc[0])
+                to_treat.append(gcfit['treatment'].iloc[-1])
+                treatment.append(treatment_steps)
+
+                demag_treat = gcfit['demag'].astype(str)
+                if demag_treat.str.contains('TH').any():
+                    demag_type  = 'TH'
+                else: demag_type = 'AF'
+                demag.append(demag_type)
+
+                coefficients.append(None)
+
+    df = pd.DataFrame({'specimen': spec, 'component': comp, 'fit_type': fit_type, 'n': n, 'from': from_treat, 'to': to_treat, 
+                       'Ds': Ds, 'Is': Is, 'Dg': Dg, 'Ig': Ig, 'Dt': Dt, 'It': It, 'mad': mad, 'demag': demag, 'coefficients': coefficients, 
+                       'treatment': treatment, 'gcs': gcs, 'gcg': gcg, 'gct': gct})
 
     return df
-    
+
 
 ############## Coordinate transformations ##############
 
@@ -331,7 +421,9 @@ def dirmod(observed, v1s):
 
     fitted_pts = []
     coefficients = []
+    coefficients_norm = []
     prev_params = None
+    init_norm = None
     for i, obs in enumerate(observed):
         init_guess = [1] * len(v1s)
         constraints = []
@@ -342,12 +434,20 @@ def dirmod(observed, v1s):
 
         result = minimize(cost_func, init_guess, args=(obs,), method='SLSQP', constraints=constraints)
         params = result.x
+
+        # normalize the coefficients to have a unit vector sum
+        if init_norm is None:
+            init_norm = np.linalg.norm(params)
+        if init_norm != 0:
+            params_norm = params / init_norm
+        
         coefficients.append(tuple(params))
+        coefficients_norm.append(tuple(params_norm))
         prev_params = params
         fitted_pt = lin_mod(params)
         fitted_pts.append(fitted_pt)
-        
-    return np.array(fitted_pts), coefficients
+    
+    return np.array(fitted_pts), coefficients, coefficients_norm
     
 
 ############## Mathematical / statistical operations ##############
@@ -365,126 +465,15 @@ def angle(v1, v2):
     
     return np.arccos(cos_theta)
 
-def fisher_mean(df, coordinates, flip='y', w_gcs='n'):
-    """
-    calculate fisher mean from dec/inc data in a dataframe
-    """
-    
-    ldf = df[df['fit_type'] == 'line']
-    gcdf = df[df['fit_type'] == 'plane']
-    
-    if len(ldf) <= 2:
-        print ('not enough lines to compute Fisher mean')
-        return
-
-    if coordinates == 'specimen': 
-        decs, incs = ldf['Ds'], ldf['Is']
-        gcs = gcdf['gcpts_s']
-    elif coordinates == 'geographic': 
-        decs, incs = ldf['Dg'], ldf['Ig']
-        gcs = gcdf['gcpts_g']
-    elif coordinates == 'tectonic': 
-        decs, incs = df['Dt'], df['It']
-        gcs = gcdf['gcpts_t']
-
-    DI = np.column_stack((decs, incs))
-
-    if flip == 'y':
-        normal, flipped = pmag.flip(DI)
-        if len(flipped) != 0: 
-            print (f'{len(flipped)} directions flipped')
-            DI = normal + flipped
-    
-    fmean = ipmag.fisher_mean(di_block=DI)
-
-    if w_gcs == 'n' or len(gcdf) == 0:
-        return fmean, None
-    else:
-        return iterative_fisher_mean(DI, gcs)
-
-
-def iterative_fisher_mean(DI, gcs):
-
-    fmean = ipmag.fisher_mean(di_block=DI) # get initial mean
-    fdir = [fmean['dec'], fmean['inc']]
-
-    shift = 45
-    while shift > 1.0:
-        nearest = []
-        for gc in gcs:
-            angs = abs(np.array([pmag.angle(pt, fdir) for pt in gc]))
-            minidx = np.argmin(angs)
-            nearest.append(gc[minidx])
-
-        new_DI = copy.deepcopy(DI).tolist()
-        for pt in nearest:
-            new_DI.append(pt)
-        new_fmean = ipmag.fisher_mean(di_block=new_DI)
-        new_fdir = [new_fmean['dec'], new_fmean['inc']]
-        shift = pmag.angle(fdir, new_fdir)
-        fdir = new_fdir
-    
-    return new_fmean, nearest
 
 
 ############## Output ##############
 
-    
+
+"""
 def update_saved_record(outfile, spec, fspec, lines, planes, coefficients, coordinates):
-    """
-    save new data to csv file (this will overwrite any existing entry with the same specimen name, component name and fit type (line or plane)
-    """
-    coefficients = np.array(coefficients) # make sure coefficients is a numpy array
 
-    # determine if the specimen was thermal or AF demagnetized (the present formulation assigns anything with some TH steps as being 'thermally demagnetized')
-    thermal = fspec['demag'].str.contains('TH').any()
-    if thermal: demag = 'TH'
-    else: demag = 'AF' # only 'AF' if there are no TH steps (more complex situations can be dealt with if needed)
-
-    new_fits = []
-    allfits = lines+planes # combine all lines and fits together
-    for i in range(len(allfits)):
-        fit_range = np.array(allfits[i][3])  # range of fitted data (lines or planes)
-        treatment = np.array(fspec['treatment']).tolist()  # keep only the treatment steps from the filtered data
-        
-        # collect mean directional records in all three coordinate systems (spec, geo, tec)
-        DI_s, DI_g, DI_t = collect_alt_dirs(allfits[i][4], coordinates, spec['az'][0], spec['hade'][0], spec['bed_dip_dir'][0], spec['bed_dip'][0])
-        if allfits[i][0] == 'line':
-            coeffs = coefficients[:, i].tolist()
-            gcpts_s, gcpts_g, gcpts_t = None, None, None
-        if allfits[i][0] == 'plane':
-            coeffs = None
-            gcpts_s, gcpts_g, gcpts_t = collect_alt_dirs(allfits[i][6], coordinates, spec['az'][0], spec['hade'][0], spec['bed_dip_dir'][0], spec['bed_dip'][0])
-    
-        # Serialize objects to strings
-        srl_coeffs = base64.b64encode(pickle.dumps(coeffs)).decode('utf-8')
-        srl_treatment = base64.b64encode(pickle.dumps(treatment)).decode('utf-8')
-        srl_gcpts_s = base64.b64encode(pickle.dumps(gcpts_s)).decode('utf-8')
-        srl_gcpts_g = base64.b64encode(pickle.dumps(gcpts_g)).decode('utf-8')
-        srl_gcpts_t = base64.b64encode(pickle.dumps(gcpts_t)).decode('utf-8')
-    
-        new_fits.append({
-            'specimen': spec['specimen'][i],
-            'component': allfits[i][1],
-            'fit_type': allfits[i][0],
-            'n': len(allfits[i][2]),
-            'from': fit_range[0],
-            'to': fit_range[-1],
-            'Ds': DI_s[0][0],
-            'Is': DI_s[0][1],
-            'Dg': DI_g[0][0],
-            'Ig': DI_g[0][1],
-            'Dt': DI_t[0][0],
-            'It': DI_t[0][1],
-            'mad': allfits[i][5],
-            'demag': demag,
-            'coefficients': srl_coeffs,
-            'treatment': srl_treatment,
-            'gcpts_s':  srl_gcpts_s,
-            'gcpts_g':  srl_gcpts_g,
-            'gcpts_t':  srl_gcpts_t
-        })
-    new_df = pd.DataFrame(new_fits)
+    save new data to csv file (this will overwrite any existing entry with the same specimen name, component name and fit type (line or plane)      
 
     # if there is an existing file, check if there is a row with the same specimen name, component name and fit type, and if so, overwrite
     cols2match = ['specimen', 'component', 'fit_type']
@@ -501,7 +490,7 @@ def update_saved_record(outfile, spec, fspec, lines, planes, coefficients, coord
     
     updated_df.to_csv(outfile, index=False)  
 
-
+"""
 
 ############## Other functions ##############
 
@@ -525,42 +514,80 @@ def cycle_autoPCA(fspec, weight, penalty):
 
 def mean_decay(comp_dfs):
 
-    interp_treatments = []
-    interp_coefficients = []
+    mean_treatments = []
+    mean_coefficients = []
     for df in comp_dfs:       
         ldf = df[df['fit_type'] == 'line']
 
         # do AF first
         AFdf = ldf[ldf['demag'] == 'AF']
         if len(AFdf) == 0:
-            interp_treatments.append([])
-            interp_coefficients.append([])
+            mean_treatments.append([])
+            mean_coefficients.append([])
         else:
             treatments = AFdf['treatment'].reset_index(drop=True)
             coefficients = AFdf['coefficients'].reset_index(drop=True)
-            treatments_flattened = np.concatenate(treatments.values)
-            treat_steps = np.arange(0, treatments_flattened.max()+5, 5)
+            reg_treatment_list = [np.arange(0, t.max() + 1, 1) for t in treatments]
+            int_coefficients_list = []
+            
             for i in range(len(treatments)):
-                linear_interp = interp1d(treatments[i], abs(coefficients[i]), kind='linear')
-                int_coefficients = linear_interp(treat_steps)
-            interp_treatments.append(treat_steps)
-            interp_coefficients.append(int_coefficients)
+                linear_interp = interp1d(treatments[i], abs(coefficients[i]), kind='linear', bounds_error=False, fill_value=np.nan)
+                int_coefficients = linear_interp(reg_treatment_list[i])
+                int_coefficients_list.append(int_coefficients)
+
+            # Find the longest treatment sequence to align arrays
+            max_length = max(len(arr) for arr in int_coefficients_list)
+            
+            # Pad arrays to match the longest one (using NaNs)
+            padded_interpolated = [np.pad(arr, (0, max_length - len(arr)), constant_values=np.nan) for arr in int_coefficients_list]
+            
+            # Stack arrays and compute mean, ignoring NaNs
+            interpolated_array = np.vstack(padded_interpolated)
+            mean_interp_coeffs = np.nanmean(interpolated_array, axis=0)
+            
+            # Use the longest treatment sequence as the reference for final output
+            ref_treat_steps = np.arange(0, max_length * 1, 1)  # Ensures consistent x-axis
+        
+            # Store results
+            mean_treatments.append(ref_treat_steps)
+            mean_coefficients.append(mean_interp_coeffs)
 
         # do TH
         THdf = ldf[ldf['demag'] == 'TH']
         if len(THdf) == 0:
-            interp_treatments.append([])
-            interp_coefficients.append([])
+            mean_treatments.append([])
+            mean_coefficients.append([])
         else:
             treatments = THdf['treatment'].reset_index(drop=True)
             coefficients = THdf['coefficients'].reset_index(drop=True)
-            treatments_flattened = np.concatenate(treatments.values)
-            treat_steps = np.arange(0, treatments_flattened.max()+5, 5)
+            reg_treatment_list = [np.arange(0, t.max() + 5, 5) for t in treatments]
+            int_coefficients_list = []
+            
             for i in range(len(treatments)):
-                linear_interp = interp1d(treatments[i], abs(coefficients[i]), kind='linear')
-                int_coefficients = linear_interp(treat_steps)
-            interp_treatments.append(treat_steps)
-            interp_coefficients.append(int_coefficients)
+                linear_interp = interp1d(treatments[i], abs(coefficients[i]), kind='linear', bounds_error=False, fill_value=np.nan)
+                int_coefficients = linear_interp(reg_treatment_list[i])
+                int_coefficients_list.append(int_coefficients)
+                
+            # Find the longest treatment sequence to align arrays
+            max_length = max(len(arr) for arr in int_coefficients_list)
+            
+            # Pad arrays to match the longest one (using NaNs)
+            padded_interpolated = [np.pad(arr, (0, max_length - len(arr)), constant_values=np.nan) for arr in int_coefficients_list]
+            
+            # Stack arrays and compute mean, ignoring NaNs
+            interpolated_array = np.vstack(padded_interpolated)
+            mean_interp_coeffs = np.nanmean(interpolated_array, axis=0)
+            
+            # Use the longest treatment sequence as the reference for final output
+            ref_treat_steps = np.arange(0, max_length * 5, 5)  # Ensures consistent x-axis
+        
+            # Store results
+            mean_treatments.append(ref_treat_steps)
+            mean_coefficients.append(mean_interp_coeffs)
 
+<<<<<<< HEAD
+    return (mean_treatments, mean_coefficients)
+=======
     return (interp_treatments, interp_coefficients)
+>>>>>>> c9aded43cb63827f08c613a354efb3e2bda1cdaa
         

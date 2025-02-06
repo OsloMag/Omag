@@ -18,11 +18,11 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
     if not lines:
         lnames, lpts, ldirs, lmads, lsegs, lcolors = [], [], [], [], [], []
     else:
-        lnames, lpts, ldirs, lmads, lsegs, lcolors = zip(*[(line[1], line[2], line[5], line[6], line[7], line[8]) for line in lines])
+        lnames, lpts, ldirs, lmads, lsegs, lcolors = zip(*[(line[1], line[2], line[5], line[6], line[7], line[9]) for line in lines])
     if not planes:
         gcnames, gcpts, ndirs, gcmads, gcsegs, gccolors = [], [], [], [], [], []
     else:
-        gcnames, gcpts, ndirs, gcmads, gcsegs, gccolors = zip(*[(plane[1], plane[2], plane[5], plane[6], plane[7], plane[8]) for plane in planes])
+        gcnames, gcpts, ndirs, gcmads, gcsegs, gccolors = zip(*[(plane[1], plane[2], plane[5], plane[6], plane[7], plane[9]) for plane in planes])
 
     fig = plt.figure(constrained_layout=True, figsize=(16,8))
     gs = fig.add_gridspec(3, 2)
@@ -134,7 +134,7 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
     plt.show();
 
 
-def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficients):
+def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficients, coefficients_norm):
 
     if coordinates == 'specimen':
         X, Y, Z, negZ = 'X', 'Y', 'Z', '-Z'
@@ -145,7 +145,7 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
     for i in range(len(lines)): 
         lnames.append(lines[i][1])
         ldirs.append(lines[i][5])
-        lcolors.append(lines[i][8])
+        lcolors.append(lines[i][9])
     
     fig = plt.figure(constrained_layout=True, figsize=(16,8))
     gs = fig.add_gridspec(3, 2)
@@ -249,9 +249,9 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
         
     ax3 = fig.add_subplot(gs[2:3, 1])
     steps = filtered['treatment']
-    coeff_arr = np.array(coefficients)
+    coeff_norm_arr = np.array(coefficients_norm)
     for i in range(len(ldirs)):
-        ax3.plot(steps, abs(coeff_arr[:,i]), color=lcolors[i], alpha=0.75, label=f'comp. {lnames[i]}')
+        ax3.plot(steps, abs(coeff_norm_arr[:,i]), color=lcolors[i], alpha=0.75, label=f'comp. {lnames[i]}')
     ax3.tick_params(axis='y', which='both', direction='in', length=6, labelbottom=False)
     ax3.grid(which='both', axis='y', linestyle='--', color='gray', linewidth=0.5)
     ax3.set_xlabel('Treatment')
@@ -266,7 +266,7 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
 
     plt.show();
 
-def interactive_zij_plt(data, filtered, lines, planes, colors, coordinates, show_lines='y', show_planes='n'):
+def interactive_zij_plt(coordinates, data, filtered, lines, planes, show_lines='y', show_planes='n'):
 
     if coordinates == 'specimen':
         X, Y, Z, negZ = 'X', 'Y', 'Z', '-Z'
@@ -285,14 +285,15 @@ def interactive_zij_plt(data, filtered, lines, planes, colors, coordinates, show
     if show_lines == 'y':
     # add PCA segments
         for i in range(len(lines)):
-            lseg = lines[i][6]
+            lseg = lines[i][7]
+            color = lines[i][9]
             fig.add_trace(pgo.Scatter3d(x=[lseg[0][0], lseg[1][0]], y=[lseg[0][1], lseg[1][1]],  z=[lseg[0][2], lseg[1][2]], mode="lines",
-                line=dict(width=5, color=colors[i]), opacity=0.5, name=f'Comp. {lines[i][1]}'))
+                line=dict(width=5, color=color), opacity=0.5, name=f'Comp. {lines[i][1]}'))
 
     if show_planes == 'y':
     # add GC planes
         for i in range(len(planes)):
-            nvec = planes[i][4]
+            nvec = planes[i][5]
             xmax = data['x1'].abs().max()
             ymax = data['x2'].abs().max()
             zmax = data['x3'].abs().max()
@@ -314,17 +315,17 @@ def interactive_zij_plt(data, filtered, lines, planes, colors, coordinates, show
 ############# site-/study-level plots #############
 
 
-def overview_plt(comp_dfs, fmeans, pests, mean_decay, coordinates, colors):
+def overview_plt(comp_dfs, fmeans, pests, mean_treatments, mean_coefficients, coordinates, colors):
 
     if coordinates == 'specimen': 
         dec, inc = 'Ds', 'Is'
-        gcpts = 'gcpts_s'
+        gcpts = 'gcs'
     elif coordinates == 'geographic': 
         dec, inc = 'Dg', 'Ig'
-        gcpts = 'gcpts_g'
+        gcpts = 'gcg'
     elif coordinates == 'tectonic': 
         dec, inc = 'Dt', 'It'
-        gcpts = 'gcpts_t'
+        gcpts = 'gct'
     
     n = len(comp_dfs) 
     components = []
@@ -356,8 +357,6 @@ def overview_plt(comp_dfs, fmeans, pests, mean_decay, coordinates, colors):
 
     ax1.legend(loc='upper right', fontsize=12, markerscale=1.25)
 
-    int_treatment = mean_decay[0]
-    int_coefficients = mean_decay[1]
     
     axes = []
     subplt_idx = 0
@@ -372,8 +371,8 @@ def overview_plt(comp_dfs, fmeans, pests, mean_decay, coordinates, colors):
                 dfAF = df[df['demag'] == 'AF']
                 for treatment, coefficients in zip(dfAF['treatment'], dfAF['coefficients']):
                     ax.plot(treatment, abs(coefficients), color=colors[i], alpha=0.5)
-                ax.plot(int_treatment[subplt_idx], int_coefficients[subplt_idx], color=colors[i], linewidth=2, label=f'comp. {components[i]}')
-                if len(int_treatment[subplt_idx]) > 0: 
+                ax.plot(mean_treatments[subplt_idx], mean_coefficients[subplt_idx], color=colors[i], linewidth=2, label=f'comp. {components[i]}')
+                if len(mean_treatments[subplt_idx]) > 0: 
                     ax.legend(loc='upper right')
                 ax.set_ylabel('remanent contribution')
                 if i == 0:
@@ -386,8 +385,8 @@ def overview_plt(comp_dfs, fmeans, pests, mean_decay, coordinates, colors):
                 dfTH = df[df['demag'] == 'TH']
                 for treatment, coefficients in zip(dfTH['treatment'], dfTH['coefficients']):
                     ax.plot(treatment, abs(coefficients), color=colors[i], alpha=0.5)
-                ax.plot(int_treatment[subplt_idx], int_coefficients[subplt_idx], color=colors[i], linewidth=2, label=f'comp. {components[i]}')
-                if len(int_treatment[subplt_idx]) > 0: 
+                ax.plot(mean_treatments[subplt_idx], mean_coefficients[subplt_idx], color=colors[i], linewidth=2, label=f'comp. {components[i]}')
+                if len(mean_treatments[subplt_idx]) > 0: 
                     ax.legend(loc='upper right')
                 if i == 0:
                     ax.set_title('Thermal demagnetization spectra')
