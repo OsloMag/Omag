@@ -404,7 +404,7 @@ def overview_plt(comp_dfs, fmeans, pests, mean_treatments, mean_coefficients, co
     
     plt.subplots_adjust(wspace=0.1, hspace=0.15)
               
-
+    plt.show()
 
 ############# things stripped out of pmagpy that need to be revisited #############
 

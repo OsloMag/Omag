@@ -460,7 +460,132 @@ def angle(v1, v2):
     
     return np.arccos(cos_theta)
 
+def fisher_mean(df, coordinates, flip='y', w_gcs='n'):
+    """
+    calculate fisher mean from dec/inc data in a dataframe
+    """
+    
+    ldf = df[df['fit_type'] == 'line']
+    gcdf = df[df['fit_type'] == 'plane']
+    
+    if len(ldf) <= 2:
+        print ('not enough lines to compute Fisher mean')
+        return
 
+    if coordinates == 'specimen': 
+        decs, incs = ldf['Ds'], ldf['Is']
+        gcs = gcdf['gcs']
+    elif coordinates == 'geographic': 
+        decs, incs = ldf['Dg'], ldf['Ig']
+        gcs = gcdf['gcg']
+    elif coordinates == 'tectonic': 
+        decs, incs = df['Dt'], df['It']
+        gcs = gcdf['gct']
+
+    DI = np.column_stack((decs, incs))
+
+    if flip == 'y':
+        normal, flipped = flip(DI)
+        if len(flipped) != 0: 
+            print (f'{len(flipped)} directions flipped')
+            DI = normal + flipped
+    
+    fmean = fisher_mean(DI)
+
+    if w_gcs == 'n' or len(gcdf) == 0:
+        return fmean, None
+    else:
+        return iterative_fisher_mean(DI, gcs)
+
+
+def iterative_fisher_mean(DI, gcs):
+
+    fmean = fisher_mean(DI) # get initial mean
+    fdir = [fmean['dec'], fmean['inc']]
+
+    shift = 45
+    while shift > 1.0:
+        nearest = []
+        for gc in gcs:
+            angs = abs(np.array([np.degrees(angle(to_car(pt), to_car(fdir))) for pt in gc]))
+            minidx = np.argmin(angs)
+            nearest.append(gc[minidx])
+
+        new_DI = copy.deepcopy(DI).tolist()
+        for pt in nearest:
+            new_DI.append(pt)
+        new_fmean = fisher_mean(new_DI)
+        new_fdir = [new_fmean['dec'], new_fmean['inc']]
+        shift = np.degrees(angle(to_car(fdir), to_car(new_fdir)))
+        fdir = new_fdir
+    
+    return new_fmean, nearest
+
+
+############## Taken from Pmagpy ... need to fix ##############
+
+def fisher_mean(dirs):
+    """ ... """
+    N, fpars = len(data), {}
+    
+    if N < 2: 
+        return {'dec': data[0][0], 
+                'inc': data[0][1]}
+    
+    x = np.array(to_car(data))
+    xbar = x.sum(axis=0)
+    res = np.linalg.norm(xbar)
+    xbar_norm = xbar/res
+    mean_dir = to_sph(xbar_norm)
+
+    fpars["dec"] = mean_dir[0]
+    fpars["inc"] = mean_dir[1]
+    fpars["n"] = N
+    fpars["r"] = res
+    
+    if N != res:
+        k = (N - 1.) / (N - res)
+        fpars["k"] = k
+        csd = 81./np.sqrt(k)
+    else:
+        fpars['k'] = 'inf'
+        csd = 0.
+    b = 20.**(1./(N - 1.)) - 1
+    a = 1 - b * (N - R) / R
+    if a < -1:
+        a = -1
+    a95 = np.degrees(np.arccos(a))
+    fpars["alpha95"] = a95
+    fpars["csd"] = csd
+    if a < 0:
+        fpars["alpha95"] = 180.0
+    return fpars
+
+
+def flip(dirs):
+    """..."""
+    vecs = to_sph(dirs)
+    evecs,_,_ = doPCA(vecs)  # get principle direction
+    ev1 = evecs[0]
+
+    p1, p2 = [], []
+    for rec in dirs:
+        ang = np.degrees(angle(to_car(rec), ev1))
+        if ang < 90.: 
+            p1.append(rec)
+        else:
+            p2.append(rec)
+
+    if len(p1) > len(p2):
+        for i, rec in enumerate(p2):
+            d, i = (rec[0] - 180.) % 360., -rec[1]
+            p2[i] = [d, i]
+    else:
+        for i, rec in enumerate(p1):
+            d, i = (rec[0] - 180.) % 360., -rec[1]
+            p1[i] = [d, i]
+
+    return p1+p2
 
 ############## Output ##############
 

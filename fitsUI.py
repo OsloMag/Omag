@@ -16,6 +16,7 @@ class FitsManager:
         self.data_dict = {}           # empty dictionary that will hold all the data
         self.df = None                # some imports put the data in a dataframe before passing to the dictionary
         self.output_area = Output()   # setup an initial display area
+        self.interface_area = Output()
         self.specimen_names = None    # list over the specimen / sample names in the file
         self.selected_specimen_name = None
 
@@ -27,7 +28,10 @@ class FitsManager:
             self.selected_specimen_name = self.specimen_names[0]  # defaults to first specimen in the infile
             self.setup_widgets()           # setup initial widgets
             self.specimen = Specimen(manager=self)   # initialize Specimen class
-            self.interface = Interface(self.specimen, manager=self)  # initialize Interface
+
+            with self.interface_area:
+                clear_output(wait=True)
+                self.interface = Interface(self.specimen, manager=self)  # initialize Interface
 
     def get_data(self):
         """ Method to get data from infile; at the moment takes pickled files and jr6 files """
@@ -65,23 +69,17 @@ class FitsManager:
         
         # widget layout
         self.controls = widgets.HBox([self.specimen_selector, self.save_text_box])
-        display(self.controls, self.output_area)
+        display(self.controls, self.output_area, self.interface_area)
         
     def on_specimen_change(self, change):
         """ Method to update the selected specimen when a new one is selected from the dropdown menu or cycled through the arrows """
         if change['name'] == 'value':
             self.selected_specimen_name = self.specimen_selector.value
             self.specimen = Specimen(manager=self)
-            self.update_interface()
 
-    def update_interface(self):
-        """ Update the specimen data in the interface without recreating the Interface instance """
-        if hasattr(self, 'interface'):
-            self.interface.update_specimen(self.specimen)
-
-        with self.output_area:
-            clear_output(wait=True)
-            display(self.data_dict[self.selected_specimen_name]['raw'])
+            with self.interface_area:
+                clear_output(wait=True)
+                self.interface = Interface(self.specimen, manager=self)
 
     def save_data(self, b=None):
         """ Save data out to pickled file """
@@ -216,6 +214,12 @@ class Interface:
         self.coordinate_system = CoordinateSystem(coordinates='specimen', manager=self.manager)
         self.plotter = Plotter()
 
+        # ensure that specimen is in the right coordinates
+        if self.specimen.raw.get('coordinates') is not None:
+            initial_coordinates = self.specimen.raw['coordinates'].iloc[0]
+        else: initial_coordinates = 'specimen'
+        self.coordinate_system.change_coordinates(initial_coordinates, self.specimen)
+
         # setup widgets
         self.sample_selection_widgets()
         self.save_data_widgets()
@@ -241,29 +245,6 @@ class Interface:
                 widgets.HBox([self.toggle_linmod_button, self.linmod_button, self.projection_dropdown2, self.coordinates_dropdown2]), # second row
                 self.plot_output_area2)
 
-        # ensure that specimen is in the right coordinates
-        self.coordinate_system.change_coordinates(self.coordinate_system.coordinates, self.specimen)
-
-        # refresh the Zijderveld
-        self.plotter.update_zij_plot(self.coordinate_system.coordinates, self.axes_projection.projection, self.specimen, self.lines, self.planes, plot_output_area=self.plot_output_area1)
-
-    ### update specimen method to avoid re-initializing everything above when specimen changes
-    def update_specimen(self, new_specimen):
-        """ Update the specimen instance and refresh necessary UI components """
-        self.specimen = new_specimen
-        self.lines = self.manager.data_dict[self.manager.selected_specimen_name]['lines']
-        self.planes = self.manager.data_dict[self.manager.selected_specimen_name]['planes']
-        self.fitted_points = None
-        self.coefficients = []
-        self.coefficients_norm = []
-
-        if self.lines != [] or self.planes != []:  # check if there already exists fitted data
-            self.fits_applied = True
-        else: self.fits_applied = False
-        self.linmod_applied = False
-
-        # ensure that specimen is in the right coordinates (and generate the x1-x2-x3 coordinates!)
-        self.coordinate_system.change_coordinates(self.coordinate_system.coordinates, self.specimen)
 
         # refresh the Zijderveld
         self.plotter.update_zij_plot(self.coordinate_system.coordinates, self.axes_projection.projection, self.specimen, self.lines, self.planes, plot_output_area=self.plot_output_area1)
