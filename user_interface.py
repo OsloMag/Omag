@@ -83,7 +83,7 @@ class FitsManager:
             clear_output(wait=True)
             display(self.data_dict[self.selected_specimen_name]['raw'])
 
-    def save_data(self):
+    def save_data(self, b=None):
         """ Save data out to pickled file """
         if self.save_text_box: 
             filename = self.save_text_box.value + '.pkl'
@@ -92,7 +92,10 @@ class FitsManager:
         try:
             with open(filename, 'wb') as f:
                 pickle.dump(self.data_dict, f)
-                print (f'Data saved to {filename}')
+
+                with self.interface.message_output_area1:
+                    print(f'Data saved to {filename}')
+
         except Exception as e:
             print (f'Error saving data: {e}')
 
@@ -279,7 +282,7 @@ class Interface:
     def save_data_widgets(self):
         """ Widgets enabling data output """
         self.save_data_button = widgets.Button(description="Save Data", layout=widgets.Layout(width="150px"))
-        self.save_data_button.on_click(self.save_data)
+        self.save_data_button.on_click(self.manager.save_data)
 
     def coordinate_projection_widgets(self):
         """ Widgets controlling coordinate and projection settings """
@@ -435,13 +438,6 @@ class Interface:
         current_index = self.manager.specimen_names.index(self.manager.selected_specimen_name)
         new_index = (current_index + 1) % len(self.manager.specimen_names)  # wrap around to first if we reach the last
         self.manager.specimen_selector.value = self.manager.specimen_names[new_index] # update dropdown value
-
-    def save_data(self, filename=None):
-        """ Save out the data """
-        if filename is None: filename = 'output'
-        self.manager.save_data(filename)
-        with self.message_output_area1:
-            print(f'Data saved to {filename}.pkl')
 
     def toggle_hide_lines_widgets(self, b=None):
         """ Show/hide the fit lines widgets """
