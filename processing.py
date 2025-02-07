@@ -367,9 +367,9 @@ def autoPCA(fspec, comps=1, w=0.5, p=0.5):
     # iterate through all combinations of series in fspec
     for i1 in range(len(fspec)):
         for j1 in range(i1+3, len(fspec)):
-            range1 = points[i1:j1]
+            range1 = points[i1:j1+1]
             _, mad1, _ = linefit(range1)       
-            num_pts1 = j1-i1
+            num_pts1 = j1-i1+1
             
             if comps <= 1:  # if assuming just one component
                 score = -w*mad1 + (1-w)*num_pts1 - 1*p
@@ -378,9 +378,9 @@ def autoPCA(fspec, comps=1, w=0.5, p=0.5):
             else:  # otherwise look for a 2nd component that lies at higher range than first component
                 for i2 in range(j1, len(fspec)):
                     for j2 in range(i2+3, len(fspec)):
-                        range2 = points[i2:j2]
+                        range2 = points[i2:j2+1]
                         _, mad2, _ = linefit(range2) 
-                        num_pts2 = j2-i2
+                        num_pts2 = j2-i2+1
 
                         if comps <= 2:  # if assuming just 2 components
                             avg_mad = (mad1+mad2)/2
@@ -390,9 +390,9 @@ def autoPCA(fspec, comps=1, w=0.5, p=0.5):
                         else:  # otherwise look for a 3rd component that lies at higher range than second component
                             for i3 in range(j2, len(fspec)):
                                 for j3 in range(i3+3, len(fspec)):
-                                    range3 = points[i3:j3]
+                                    range3 = points[i3:j3+1]
                                     _, mad3, _ = linefit(range3) 
-                                    num_pts3 = j3 - i3
+                                    num_pts3 = j3-i3+1
                                     
                                     avg_mad = (mad1+mad2+mad3)/3
                                     score = -w*avg_mad + (1-w)*(num_pts1+num_pts2+num_pts3) - 3*p
@@ -460,7 +460,7 @@ def angle(v1, v2):
     
     return np.arccos(cos_theta)
 
-def fisher_mean(df, coordinates, flip='y', w_gcs='n'):
+def get_fisher_mean(df, coordinates, flip=False, w_gcs=False):
     """
     calculate fisher mean from dec/inc data in a dataframe
     """
@@ -484,15 +484,15 @@ def fisher_mean(df, coordinates, flip='y', w_gcs='n'):
 
     DI = np.column_stack((decs, incs))
 
-    if flip == 'y':
-        normal, flipped = flip(DI)
+    if flip:
+        normal, flipped = do_flip(DI)
         if len(flipped) != 0: 
             print (f'{len(flipped)} directions flipped')
             DI = normal + flipped
     
     fmean = fisher_mean(DI)
 
-    if w_gcs == 'n' or len(gcdf) == 0:
+    if not w_gcs or len(gcdf) == 0:
         return fmean, None
     else:
         return iterative_fisher_mean(DI, gcs)
@@ -502,12 +502,14 @@ def iterative_fisher_mean(DI, gcs):
 
     fmean = fisher_mean(DI) # get initial mean
     fdir = [fmean['dec'], fmean['inc']]
+    car_fdir = to_car([fdir]).flatten()
 
     shift = 45
     while shift > 1.0:
         nearest = []
         for gc in gcs:
-            angs = abs(np.array([np.degrees(angle(to_car(pt), to_car(fdir))) for pt in gc]))
+            car_gc = to_car(gc)
+            angs = np.abs(np.array([angle(pt, car_fdir) for pt in car_gc]))
             minidx = np.argmin(angs)
             nearest.append(gc[minidx])
 
@@ -516,7 +518,8 @@ def iterative_fisher_mean(DI, gcs):
             new_DI.append(pt)
         new_fmean = fisher_mean(new_DI)
         new_fdir = [new_fmean['dec'], new_fmean['inc']]
-        shift = np.degrees(angle(to_car(fdir), to_car(new_fdir)))
+        car_new_fdir = to_car([new_fdir]).flatten()
+        shift = np.abs(np.array([angle(car_new_fdir, car_fdir)]))
         fdir = new_fdir
     
     return new_fmean, nearest
@@ -526,20 +529,20 @@ def iterative_fisher_mean(DI, gcs):
 
 def fisher_mean(dirs):
     """ ... """
-    N, fpars = len(data), {}
+    N, fpars = len(dirs), {}
     
     if N < 2: 
-        return {'dec': data[0][0], 
-                'inc': data[0][1]}
-    
-    x = np.array(to_car(data))
+        return {'dec': dirs[0][0], 
+                'inc': dirs[0][1]}
+
+    x = np.array(to_car(dirs))
     xbar = x.sum(axis=0)
     res = np.linalg.norm(xbar)
     xbar_norm = xbar/res
-    mean_dir = to_sph(xbar_norm)
+    mean_dir = to_sph([xbar_norm])
 
-    fpars["dec"] = mean_dir[0]
-    fpars["inc"] = mean_dir[1]
+    fpars["dec"] = mean_dir[0][0]
+    fpars["inc"] = mean_dir[0][1]
     fpars["n"] = N
     fpars["r"] = res
     
@@ -551,7 +554,7 @@ def fisher_mean(dirs):
         fpars['k'] = 'inf'
         csd = 0.
     b = 20.**(1./(N - 1.)) - 1
-    a = 1 - b * (N - R) / R
+    a = 1 - b * (N - res) / res
     if a < -1:
         a = -1
     a95 = np.degrees(np.arccos(a))
@@ -562,28 +565,34 @@ def fisher_mean(dirs):
     return fpars
 
 
-def flip(dirs):
+def do_flip(dirs):
     """..."""
-    vecs = to_sph(dirs)
+    vecs = to_car(dirs)
     evecs,_,_ = doPCA(vecs)  # get principle direction
     ev1 = evecs[0]
 
     p1, p2 = [], []
-    for rec in dirs:
-        ang = np.degrees(angle(to_car(rec), ev1))
+    for i, v in enumerate(vecs):
+        ang = np.degrees(angle(v, ev1))
         if ang < 90.: 
-            p1.append(rec)
+            p1.append(dirs[i])
         else:
-            p2.append(rec)
+            p2.append(dirs[i])
 
-    if len(p1) > len(p2):
+    print ('p1:', p1)
+    print ('p2:', p2)
+    if len(p1) == 0: 
+        return p2
+    elif len(p2) == 0: 
+        return p1
+    elif len(p1) > len(p2):
         for i, rec in enumerate(p2):
             d, i = (rec[0] - 180.) % 360., -rec[1]
-            p2[i] = [d, i]
-    else:
+            p2[i] = np.array([d, i])
+    elif len(p1) < len(p2):
         for i, rec in enumerate(p1):
             d, i = (rec[0] - 180.) % 360., -rec[1]
-            p1[i] = [d, i]
+            p1[i] = np.array([d, i])
 
     return p1+p2
 

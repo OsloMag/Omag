@@ -1,6 +1,6 @@
 import ipywidgets as widgets
 from ipywidgets import Output
-from IPython.display import display, clear_output
+from IPython.display import display, clear_output, HTML
 import numpy as np
 import pickle
 import processing as pro
@@ -152,7 +152,10 @@ class CoordinateSystem:
 
         with self.manager.output_area:       # update the displayed data
             clear_output(wait=True)
-            display(self.manager.data_dict[self.manager.selected_specimen_name]['raw']) 
+            #display(self.manager.data_dict[self.manager.selected_specimen_name]['raw']) 
+
+            display(HTML(f"""<div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc;">
+                        {self.manager.data_dict[self.manager.selected_specimen_name]['raw'].to_html()}</div>"""))
         
     def get_coordinates(self):
         """ Returns the current coordinates """
@@ -507,8 +510,8 @@ class Interface:
         """ Add a new row for a new line fit """
         from_dropdown = widgets.Dropdown(options=list(self.specimen.get_filtered_specimen().index), description='From:', layout=widgets.Layout(width="150px"))
         to_dropdown = widgets.Dropdown(options=list(self.specimen.get_filtered_specimen().index), description='To:', layout=widgets.Layout(width="150px"))
-        include_origin_checkbox = widgets.Checkbox(value=False, description='Include Origin', layout=widgets.Layout(width="200px"), margin='0px')
-        anchor_checkbox = widgets.Checkbox(value=False, description='Anchor', layout=widgets.Layout(width="200px"), margin='0px')
+        include_origin_checkbox = widgets.Checkbox(value=False, description='Include Origin', indent=False, layout=widgets.Layout(width="auto"), margin='20px')
+        anchor_checkbox = widgets.Checkbox(value=False, description='Anchor', indent=False, layout=widgets.Layout(width="auto"), margin='20px')
         line_name_text = widgets.Text(description='Component:', layout=widgets.Layout(width="200px"))
         line_color_dropdown = widgets.ColorPicker(value='green', description='Color:', layout=widgets.Layout(width="200px"))
         remove_line_button = widgets.Button(description="X", layout=widgets.Layout(width="30px"))
@@ -522,8 +525,10 @@ class Interface:
             line_name_text.value = prefill[1]
             line_color_dropdown.value = prefill[9]
 
-        widget_row = widgets.HBox([from_dropdown, to_dropdown, include_origin_checkbox, anchor_checkbox, line_name_text, line_color_dropdown, remove_line_button],
-                                 layout=widgets.Layout(width='100%', justify_content='flex-start', spacing='0px'))
+        space = widgets.Label("", layout=widgets.Layout(width="60px"))
+
+        widget_row = widgets.HBox([from_dropdown, to_dropdown, space, include_origin_checkbox, space, anchor_checkbox, space, line_name_text, line_color_dropdown, remove_line_button],
+                                 layout=widgets.Layout(width='100%', justify_content='flex-start'))
         
         self.fit_line_widgets.append((from_dropdown, to_dropdown, include_origin_checkbox, anchor_checkbox, line_name_text, line_color_dropdown, widget_row))
         self.fit_lines_container.children += (widget_row,)
@@ -537,8 +542,8 @@ class Interface:
         """ Add a new row for a new plane fit """
         from_dropdown = widgets.Dropdown(options=list(self.specimen.get_filtered_specimen().index), description='From:', layout=widgets.Layout(width="150px"))
         to_dropdown = widgets.Dropdown(options=list(self.specimen.get_filtered_specimen().index), description='To:', layout=widgets.Layout(width="150px"))       
-        normalize_checkbox = widgets.Checkbox(value=False, description='Normalize', layout=widgets.Layout(width="200px"), margin='0px')
-        constraints_checkbox = widgets.Checkbox(value=False, description='Apply Constraints', layout=widgets.Layout(width="200px"), margin='0px')
+        normalize_checkbox = widgets.Checkbox(value=False, description='Normalize', indent=False, layout=widgets.Layout(width="auto"), margin='20px')
+        constraints_checkbox = widgets.Checkbox(value=False, description='Constraints', indent=False, layout=widgets.Layout(width="auto"), margin='20px')
         plane_name_text = widgets.Text(description='Component:', layout=widgets.Layout(width="200px"))
         plane_color_dropdown = widgets.ColorPicker(value='green', description='Color:', layout=widgets.Layout(width="200px"))
         remove_plane_button = widgets.Button(description="X", layout=widgets.Layout(width="30px"))
@@ -552,8 +557,10 @@ class Interface:
             plane_name_text.value = prefill[1]
             plane_color_dropdown.value = prefill[9]
 
-        widget_row = widgets.HBox([from_dropdown, to_dropdown, normalize_checkbox, constraints_checkbox, plane_name_text, plane_color_dropdown, remove_plane_button],
-                                 layout=widgets.Layout(width='100%', justify_content='flex-start', spacing='0px'))
+        space = widgets.Label("", layout=widgets.Layout(width="60px"))
+
+        widget_row = widgets.HBox([from_dropdown, to_dropdown, space, normalize_checkbox, space, constraints_checkbox, space, plane_name_text, plane_color_dropdown, remove_plane_button],
+                                 layout=widgets.Layout(width='100%', justify_content='flex-start'))
         
         self.fit_plane_widgets.append((from_dropdown, to_dropdown, normalize_checkbox, constraints_checkbox, plane_name_text, plane_color_dropdown, widget_row))
         self.fit_planes_container.children += (widget_row,)

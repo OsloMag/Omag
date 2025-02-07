@@ -6,6 +6,7 @@ import pandas as pd
 import pickle
 import processing as pro
 import plotting as plo
+from qgridnext import show_grid
 
 
 ######### Manager class ############ 
@@ -24,10 +25,13 @@ class StatsManager:
         
         self.get_data()
         self.df = pro.process_pkl(self.data_dict)
+        simplified_df = self.df.drop(['coefficients', 'treatment', 'gcs', 'gcg', 'gct'], axis=1)
         
         with self.output_area:
             clear_output(wait=True)
-            display(self.df)
+
+            display(HTML(f"""<div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc;">
+                        {self.df.to_html()}</div>"""))
 
         display(self.output_area)
 
@@ -69,13 +73,14 @@ class Interface:
         self.coordinate_system = CoordinateSystem(coordinates='geographic', manager=self.manager)
         self.message_output_area1 = Output()
         self.message_output_area2 = Output()
-        self.plot_output_area = Output()
+        self.plot_output_area1 = Output()
+        #self.plot_output_area2 = Output()
         
         self.components_list = self.df['component'].unique()
 
         with self.message_output_area1:
             clear_output(wait=True)
-            display(HTML(f'Components available in dataframe: {", ".join(map(str, self.components_list))}'))
+            display(HTML(f'components available in dataframe: {", ".join(map(str, self.components_list))}'))
 
         self.component_dfs = []
         self.component_colors = []
@@ -86,17 +91,21 @@ class Interface:
         # widgets
         self.comps_textbox = widgets.Text(description='components to plot:', placeholder='e.g. A, B', layout=widgets.Layout(width='300px'),
                                             style={'description_width': '150px'} ) 
-        self.colors_textbox = widgets.Text(description='component colors:', placeholder='e.g. red, blue', layout=widgets.Layout(width='300px'),
+        self.flip_checkbox = widgets.Checkbox(value=False, description='Flip to common polarity', layout=widgets.Layout(width="auto"), margin='20px')
+        self.w_gcs_checkbox = widgets.Checkbox(value=False, description='Include planes', layout=widgets.Layout(width="auto"), margin='20px')
+        self.colors_textbox = widgets.Text(description='component colors:', placeholder='e.g. red, blue', layout=widgets.Layout(width='350px'),
                                             style={'description_width': '150px'} ) 
-
+        space = widgets.Label("", layout=widgets.Layout(width="60px"))
+        
         self.update_plot_button = widgets.Button(description="update plots", layout=widgets.Layout(width="120px"))  # toggle the data filter panel
         self.update_plot_button.on_click(self.update_plots)
         
         # widget layout
         display(self.message_output_area1,
-                widgets.HBox([self.comps_textbox, self.colors_textbox, self.update_plot_button]),
+                widgets.HBox([self.comps_textbox, self.flip_checkbox, self.w_gcs_checkbox, self.colors_textbox, space, self.update_plot_button]),
                 self.message_output_area2,
-                self.plot_output_area)
+                self.plot_output_area1)
+                #self.plot_output_area2)
         
     def update_plots(self, b=None):
         """ ... """
@@ -135,12 +144,17 @@ class Interface:
         """ ... """
         with self.message_output_area2:
             clear_output(wait=False)
-            
+
+        flip = self.flip_checkbox.value
+        w_gcs = self.w_gcs_checkbox.value
+        
         self.fisher_means = []
         for i, comp in enumerate(self.component_dfs): 
-            fmean, pests = pro.fisher_mean(comp, self.coordinate_system.coordinates, flip='y', w_gcs='n')
+            fmean, pests = pro.get_fisher_mean(comp, self.coordinate_system.coordinates, flip=flip, w_gcs=w_gcs)
             self.fisher_means.append(fmean)
             self.pests.append(pests)
+
+            print (self.pests)
 
             with self.message_output_area2:
                 print (f"Comp. {i} mean (n={fmean['n']}): Dec: {fmean['dec']:.2f}, Inc: {fmean['inc']:.2f}, a95: {fmean['alpha95']:.2f}")
@@ -151,6 +165,6 @@ class Interface:
 
     def overview_plot(self):
         """ ... """
-        with self.plot_output_area:
+        with self.plot_output_area1:
             clear_output(wait=True)
             plo.overview_plt(self.component_dfs, self.fisher_means, self.pests, self.mean_treatments, self.mean_coefficients, self.coordinate_system.coordinates, self.colors)
