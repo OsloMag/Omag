@@ -11,9 +11,8 @@ import pickle, base64
 ############## File formatting ##############
 
 def import_jr6(filename):
-    """
-    Imports standard JR6 data file into a Pandas DataFrame.
-    """
+    """ Imports standard JR6 data file into formatted Pandas DataFrame """
+    
     cols = ['specimen', 'treatment', 'x', 'y','z','exp','az','dip','fol_az','fol_dip','lin_trend','lin_plunge','P1','P2','P3','P4','precision','end']
     widths = [10,8,6,6,6,4,4,4,4,4,4,4,3,3,3,3,4,2]  # standard jr6 column widths
     
@@ -56,6 +55,7 @@ def import_jr6(filename):
 
 
 def process_pkl(data_dict):
+    """ Imports pickled data saved by mag_fits notebook for processing in mag_stats notebook """
 
     Ds, Is, Dg, Ig, Dt, It, gcs, gcg, gct = [[] for _ in range(9)]
     spec, comp, fit_type, n, from_treat, to_treat, mad, demag, coefficients, treatment, segments = [[] for _ in range(11)]
@@ -150,16 +150,14 @@ def process_pkl(data_dict):
     df = pd.DataFrame({'specimen': spec, 'component': comp, 'fit_type': fit_type, 'n': n, 'from': from_treat, 'to': to_treat, 
                        'Ds': Ds, 'Is': Is, 'Dg': Dg, 'Ig': Ig, 'Dt': Dt, 'It': It, 'mad': mad, 'demag': demag, 'coefficients': coefficients, 
                        'treatment': treatment, 'gcs': gcs, 'gcg': gcg, 'gct': gct})
-
     return df
 
 
 ############## Coordinate transformations ##############
 
 def set_coordinates(coordinates, df):
-    """
-    Switches x-y-z and dec/inc coordinates (specimen / geographic / tectonic) in a dataframe.
-    """
+    """ Switches x-y-z and dec/inc coordinates (specimen / geographic / tectonic) in a dataframe """
+    
     if coordinates == 'specimen': 
         df[['x1', 'x2', 'x3']] = df[['x', 'y', 'z']]
         df[['dec', 'inc']] = df[['sdec', 'sinc']]
@@ -180,13 +178,15 @@ def set_coordinates(coordinates, df):
             dec_inc = to_sph(untilted_pts)
             df[['dec', 'inc']] = dec_inc[:, :2]
             df['coordinates'] = 'tectonic'
-    
+            
     return df
 
 def to_sph(vecs):
+    """ 
+    Convert Cartesian vectors to spherical coordinates  
+    Input: [[x, y, z], ..., [x, y, z]];  Output: [[dec, inc], ..., [dec, inc]]
     """
-    Convert Cartesian vectors (n,3) to declination (dec) and inclination (inc).
-    """
+    
     vecs = np.asarray(vecs)
     norms = np.linalg.norm(vecs, axis=1)
     
@@ -195,9 +195,11 @@ def to_sph(vecs):
     return  np.stack((dec, inc), axis=1)
 
 def to_car(dirs):
+    """ 
+    Convert spherical directions to Cartesian coordinates  
+    Input: [[dec, inc], ..., [dec, inc]];  Output: [[x, y, z], ..., [x, y, z]]
     """
-    Convert declination (dec), inclination (inc) pairs (n,2) to unit-length Cartesian vectors.
-    """
+    
     dirs = np.asarray(dirs)
     dec, inc = np.radians(dirs[:, 0]), np.radians(dirs[:, 1])
 
@@ -207,7 +209,8 @@ def to_car(dirs):
 
 def spe2geo(vecs, az, hade):
     """
-    rotates cartesian vectors (n,3) from specimen to geographic coordinates using given azimuth and hade
+    Rotates Cartesian vectors from specimen to geographic coordinates using given azimuth and hade
+    Input: [[x, y, z], ..., [x, y, z]], azimuth (in degrees), hade (in degrees);  Output: [[x, y, z], ..., [x, y, z]]
     """
     az_rad = np.radians(az)
     hade_rad = np.radians(hade)
@@ -219,7 +222,8 @@ def spe2geo(vecs, az, hade):
 
 def untilt(vecs, dipdir, dip):  # NEED TO CHECK THAT THIS WORKS PROPERLY!
     """
-    Applies tilt correction to Cartesian vectors (n,3) using dip direction and dip.
+    Applies tilt correction to Cartesian vectors using dip direction and dip.
+    Input: [[x, y, z], ..., [x, y, z]], dip-direction (in degrees), dip (in degrees);  Output: [[x, y, z], ..., [x, y, z]]
     """
     rot = R.from_euler('y', dip, degrees=True) * R.from_euler('z', -(dipdir - 90), degrees=True)
     return rot.apply(vecs)
@@ -227,7 +231,8 @@ def untilt(vecs, dipdir, dip):  # NEED TO CHECK THAT THIS WORKS PROPERLY!
 def collect_alt_dirs(vecs, coordinates, az, hade, dipdir, dip):
     """
     Computes the mean direction in all three coordinate systems (specimen, geographic, tectonic).
-    Input: Cartesian vectors (n,3).
+    Input: [[x, y, z], ..., [x, y, z]], coordinates (string), azimuth, hade, dip-direction, dip (the latter 4 in degrees)
+    Output: [[x, y, z], ..., [x, y, z]]
     """
     if vecs.ndim == 1: vecs = vecs.reshape(1, -1) 
     
@@ -252,26 +257,33 @@ def collect_alt_dirs(vecs, coordinates, az, hade, dipdir, dip):
 
 def doPCA(vecs):
     """
-    Applies PCA to a set of Cartesian vectors (n,3), centering the data.
+    Applies PCA to a set of Cartesian vectors
+    Input: [[x, y, z], ..., [x, y, z]];  Output: eigenvectors, eigenvalues, mean    
     """
-    pca = PCA(n_components=3)  # make PCA object
+    pca = PCA(n_components=3, svd_solver="full")  # make PCA object
     evecs = pca.fit(vecs).components_  # fit components and get eigenvectors (transforms/centers the data by removing mean)
     evals = np.sort(pca.explained_variance_)[::-1]  # get eigenvalues
+    
     return evecs, evals, pca.mean_ 
 
 def doPCA_anchored(vecs):
     """
-    Applies PCA without centering the data.
+    Does Single value decomposition (PCA with data anchored to the origin)
+    Input: [[x, y, z], ..., [x, y, z]];  Output: eigenvectors, eigenvalues
     """
     pca = TruncatedSVD(n_components=3)  # make PCA object
     evecs = pca.fit(vecs).components_      # fit components and get eigenvectors (does not remove the mean to re-center the data)
-    evals = np.sort(pca.explained_variance_)[::-1]  # get eigenvalues
-    return evecs, evals 
+    svals = np.sort(pca.singular_values_)[::-1]  # get the single values 
+    evals = (svals ** 2) / len(vecs)   # convert single values to equivalent eigenvalues
+    
+    return evecs, evals
                
 def linefit(vecs, incl_origin=False, anchor=False):
     """
-    Executes linear fitting via PCA on a set of cartesian vectors (n,3). Returns the first principal component, the associated MAD angle, 
+    Executes linear fitting via PCA on a set of cartesian vectors. Returns the first principal component, the associated MAD angle, 
     and a line segment for visualization.
+    Input: [[x, y, z], ..., [x, y, z]], include_origin (True/False), anchor (True/False)
+    Output: v1 (principal eigenvector), mad angle and line segment delineating the fitted component.
     """
     if incl_origin: 
         vecs = np.concatenate([vecs, [[0, 0, 0]]])  # append the origin itself to the end of the data before doing PCA
@@ -280,43 +292,51 @@ def linefit(vecs, incl_origin=False, anchor=False):
     evecs, evals, centroid = (result + (None,))[:3]  # unpack based on PCA method used
     
     v1 = evecs[0]  # get first principal component
-    mad = np.degrees(np.arctan(np.sqrt((evals[1] + evals[2]) / evals[0]))) #get MAD angle   
+    mad = np.degrees(np.arctan(np.sqrt((evals[1] + evals[2]) / evals[0]))) # get MAD angle   
     
     #check polarity of principal component (the polarity of which is arbitrary)
     if np.dot(v1, vecs[0] - vecs[-1]) < 0:
         v1 *= -1
-        
-    if anchor:
-        v1_segment = [[0,0,0], v1]
-    else:
-        #get end-points of a line segment that is parallel to the principal component, and centered on the data mean (for plotting)
-        scale = 0.5 * np.sqrt(evals[0] * len(vecs))    # re-scale the component to the original data scale
-        v1_segment = [centroid - scale * v1, centroid + scale * v1]
+
+    #get end-points of a line segment that is parallel to the principal component, and centered on the data mean (for plotting)
+    scale = np.sqrt(evals[0] * len(vecs))  # re-scale the component to the original data scale
+    if anchor: 
+        v1_segment = [[0,0,0], v1 * scale]
+    else: 
+        v1_segment = [centroid - 0.5 * scale * v1, centroid + 0.5 * scale * v1]
     
     return v1, mad, v1_segment
 
 def gcfit(vecs, normalize=False, constraints=False):
     """
-    Executes planar fitting via PCA on a set of cartesian vectors (n, 3); returns the third principal component (normal to the plane), 
+    Executes planar fitting via PCA on a set of cartesian vectors; returns the third principal component (normal to the plane), 
     the associated MAD angle, and a series of points tracing the circle (or a section of the circle if constraints are applied).
+    Input: [[x, y, z], ..., [x, y, z]], normalize (True/False), constraints (True/False) 
+    Output: v3 (normal to the great circle), mad angle, points delineating the plane.
     """
     if normalize:          # normalize vector lengths if desired
-        centered = vecs - np.mean(vecs, axis=0)
-        vecs = centered / np.linalg.norm(centered, axis=1, keepdims=True)
+        vecs = vecs / np.linalg.norm(vecs, axis=1, keepdims=True)
 
-    evecs, evals, centroid = doPCA(vecs)  # do PCA
+    evecs, evals = doPCA_anchored(vecs)  # do PCA (send to the anchored method so that the plane is constrained to pass through the origin)
     v3 = evecs[-1]  # get the smallest principal component
     mad = np.degrees(np.arctan(np.sqrt(evals[2]/evals[1] + evals[2]/evals[0])))  # get mad angle
 
-    constraint_pts = [vecs[0], vecs[-1]] if constraints else []  # if constraints used, grab first and last points
+    if constraints:   # if constraints used, grab first and last points
+        last_3_dirs = to_sph(vecs[-3:])  # take mean of last 3 points to avoid problems with outlying last point(s)
+        fmean = fisher_mean(last_3_dirs)
+        mean_last_vecs = to_car([[fmean['dec'], fmean['inc']]])
+        constraint_pts = [vecs[0], mean_last_vecs[0]]
+    else:
+        constraint_pts = []
     gc_segment = sample_gc(v3, constraint_pts, ang_step=0.5)  # get points along GC (or partial segment)
     
     return v3, mad, gc_segment
 
 def sample_gc(vnorm, constraints, ang_step=0.5):
     """
-    Samples points along a great circle normal to vnorm (n, 3); 
-    if constraints are provided, only a section of the GC arc is sampled.
+    Collect points along a great circle (defined by the normal to the plane: vnorm). If constraints are provided, only a section of the GC arc is sampled.
+    Input: vnorm ([x, y, z]), constraints ([[x1, y1, z1], [x2, y2, z2]]), angle step size (degrees).
+    Output: points delineating the great circle (or a small segment along it).
     """
     # choose start point based on the direction of vnorm
     start_pt = np.cross(vnorm, [1, 0, 0]) if not np.isclose(vnorm[0], 1) else np.array([0, 1, 0])
@@ -332,7 +352,9 @@ def sample_gc(vnorm, constraints, ang_step=0.5):
 
 def subsample_gc(gc_pts, vnorm, constraints, ang_step=0.5):
     """
-    Samples points along the arc of a great circle between two points (constraints).
+    Collect points along the arc of a great circle between two points (constraints). Returns points along this arc.
+    Input: points along great circle [[x, y, z], ..., [x, y, z]], vnorm ([x, y, z]), constraints ([[x1, y1, z1], [x2, y2, z2]]), angular step size (in degrees)
+    Output: points delineating the great circle (or a small segment along it).
     """
     antipode = -constraints[0]  # antipode of starting data point
     init_idx = np.argmin(np.abs(np.array([angle(pt, antipode) for pt in gc_pts])))
@@ -356,8 +378,11 @@ def subsample_gc(gc_pts, vnorm, constraints, ang_step=0.5):
 
 def autoPCA(fspec, comps=1, w=0.5, p=0.5):
     """
-    Performs PCA for all possible consecutive series of data (n>2),
-    and assuming 1, 2, or 3 components to automatically find the best options.
+    Performs PCA for all possible consecutive series of data (n>2), and assuming 1, 2, or 3 components to automatically find best options.
+    Input: Cartesian vectors [[x, y, z], ..., [x, y, z]], the max number of components to try to fit (1-3), 
+    a weighting value (0-1, higher values favor lower MAD; lower values favor more points), 
+    and a penalty value (higher penalty favors less components).
+    Output: the results per number of components, sorted by the score set by the weighting and penalty values.
     """
     fit_results = []
 
@@ -449,7 +474,7 @@ def dirmod(observed, v1s):
 
 def angle(v1, v2):
     """
-    compute the angle between two cartesian vectors
+    Compute the angle between two cartesian vectors.
     """
     v1 = np.array(v1)
     v2 = np.array(v2)
@@ -462,7 +487,10 @@ def angle(v1, v2):
 
 def get_fisher_mean(df, coordinates, flip=False, w_gcs=False):
     """
-    calculate fisher mean from dec/inc data in a dataframe
+    Set up Fisher mean calculation from dec/inc data in a dataframe.
+    Input: Dataframe with prescribed column headers for dec, inc in various coordinates, flip (True/False) determines whether or
+    not to flip any data that is 90 degrees from the mean, and w_gcs (True/False) determined whether to include any plane data or not.
+    Output: the Fisher mean dictionary (following pmagpy convention).
     """
     
     ldf = df[df['fit_type'] == 'line']
@@ -499,30 +527,75 @@ def get_fisher_mean(df, coordinates, flip=False, w_gcs=False):
 
 
 def iterative_fisher_mean(DI, gcs):
+    """
+    Estimates the Fisher mean using a mixture of lines and planes, following the methodology of McFadden and McElhinny (1988).
+    Input: dec/inc data [[dec, inc], ..., [dec, inc]] and great circle points [[dec, inc], ..., [dec, inc]].
+    Output: Fisher mean estimate (following pmagpy convention, but with n = number of lines, m = number of planes) updated with k and alpha95
+    recalculated following McFadden and McElhinny, and also outputs the contributing point on each great circle.
+    """
 
-    fmean = fisher_mean(DI) # get initial mean
-    fdir = [fmean['dec'], fmean['inc']]
-    car_fdir = to_car([fdir]).flatten()
+    # first get an initial fisher mean 
+    fmean = fisher_mean(DI)
+    fcar = to_car([[fmean['dec'], fmean['inc']]]).flatten()
 
-    shift = 45
-    while shift > 1.0:
-        nearest = []
-        for gc in gcs:
-            car_gc = to_car(gc)
-            angs = np.abs(np.array([angle(pt, car_fdir) for pt in car_gc]))
-            minidx = np.argmin(angs)
-            nearest.append(gc[minidx])
+    # convert the GC data to cartesian coordinates
+    car_gcs = []
+    for gc in gcs:
+        car_gcs.append(to_car(gc))
+        
+    # then make an initial pass through all the GCs and find the closest point and update the fmean as we go
+    new_fcar = fcar
+    new_DI = DI.copy() 
+    nearest = np.empty((0, 2))
+    for gc in car_gcs:
+        angs = [np.abs(angle(pt, new_fcar)) for pt in gc] # find closest point
+        min_idx = np.argmin(angs)
+        ndir = to_sph([gc[min_idx]])            # convert to direction
+        nearest = np.vstack([nearest, ndir])    # add to array
+        new_DI = np.vstack([new_DI, ndir])      # compile new ID list
+        new_fmean = fisher_mean(new_DI)         # compute new fdir
+        new_fcar = to_car([[new_fmean['dec'], new_fmean['inc']]]).flatten()
 
-        new_DI = copy.deepcopy(DI).tolist()
-        for pt in nearest:
-            new_DI.append(pt)
-        new_fmean = fisher_mean(new_DI)
-        new_fdir = [new_fmean['dec'], new_fmean['inc']]
-        car_new_fdir = to_car([new_fdir]).flatten()
-        shift = np.abs(np.array([angle(car_new_fdir, car_fdir)]))
-        fdir = new_fdir
+    # now loop over the list of GCs and conduct a leave-one-out analysis until the closest directional estimates converge
+    max_shift = 45
+    while max_shift > 1.0:  # keep looping until the max change is less than one degree
+        pt_shifts = []
+        for i, gc in enumerate(car_gcs):
+            former_pt = nearest[i]
+            temp_nearest = np.concatenate((nearest[:i], nearest[i+1:]), axis=0)   # remove the corresponding point
+            new_DI = np.vstack([DI, temp_nearest])   # recalculate the fisher mean without this point
+            new_fmean = fisher_mean(new_DI)
+            new_fcar = to_car([[new_fmean['dec'], new_fmean['inc']]]).flatten()
+            angs = [np.abs(angle(pt, new_fcar)) for pt in gc]  # now find the closest point again
+            min_idx = np.argmin(angs)
+            new_pt = gc[min_idx]
+            former_pt = to_car([former_pt]).flatten()
+            shift = np.degrees(angle(new_pt, former_pt))
+            pt_shifts.append(shift)
+            nearest[i] = to_sph([new_pt])             # insert this new point in the nearest list
+        max_shift = max(pt_shifts)          # after completing the loop, check the size of max value|
+
+    # calculate final fisher mean and return
+    fin_DI = np.vstack([DI, nearest])
+    fin_fmean = fisher_mean(fin_DI)
+    nearest_list = [[arr.tolist() for arr in sublist] for sublist in nearest]
+
+    # calculate the modified k and alpha95 following the formulas in McFadden and McElhinny (1988)
+    N = len(DI)
+    M = len(gcs)
+    R = fin_fmean['r']
+    Ni = M+N/2
     
-    return new_fmean, nearest
+    k = (2*M+N-2) / (2*(M+N-R))
+    a95 = np.degrees(np.arccos(1 - (Ni-1)/(k*R) * ((1/0.05)**(1/(Ni-1)) - 1)))
+
+    fin_fmean['n'] = N
+    fin_fmean['m'] = M
+    fin_fmean['k'] = k
+    fin_fmean['alpha95'] = a95
+    del fin_fmean['csd']
+    
+    return fin_fmean, nearest_list
 
 
 ############## Taken from Pmagpy ... need to fix ##############

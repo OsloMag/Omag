@@ -345,12 +345,13 @@ def overview_plt(comp_dfs, fmeans, pests, mean_treatments, mean_coefficients, co
         #planes
         gcdf = df[df['fit_type'] == 'plane']
         gcs = gcdf[gcpts]
+        pesti = pests[i]
         for j, gc in enumerate(gcs):
             up_gcpts = gc[gc[:, 1] < 0]
             dn_gcpts = gc[gc[:, 1] > 0]
             plot_di(dec=[x for x in up_gcpts[:,0]], inc=[x for x in up_gcpts[:,1]], markersize=0.5, color='grey', alpha=0.2)
             plot_di(dec=[x for x in dn_gcpts[:,0]], inc=[x for x in dn_gcpts[:,1]], markersize=0.5, color='purple', alpha=0.5)
-            plot_di(dec=pests[j][0], inc=pests[j][1], marker='s', markersize=25, color='purple')
+            plot_di(dec=pesti[j][0], inc=pests[j][1], marker='s', markersize=25, color='purple')
         
         #mean
         plot_di_mean(dec=fmeans[i]['dec'], inc=fmeans[i]['inc'], a95=fmeans[i]['alpha95'], marker='*', markersize=100, color=colors[i]) #label=f'Comp. {components[i]} mean')
