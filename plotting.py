@@ -466,7 +466,6 @@ def plot_di(dec, inc, color='k', marker='o', markersize=20, legend='no', label='
     else:
         color_list = [color] * len(dec)
     
-    
     X_down, X_up, Y_down, Y_up = [], [], [], []
     color_up, color_dn = [], []
     all_X, all_Y = [], []
@@ -512,6 +511,68 @@ def plot_di_mean(dec, inc, a95, color='k', marker='o', markersize=20, label='', 
     plt.plot(Xcirc, Ycirc, c=color)
 
     plt.tight_layout()
+
+
+def plot_gc(dec, inc, color='k', up_color=None, dn_color=None, linestyle='-', up_linestyle=None, dn_linestyle=None, linewidth=1, up_linewidth=None, dn_linewidth=None, 
+            alpha=1, up_alpha=None, dn_alpha=None, legend='no', label='', title=None, zorder=2):
+    """
+    Plot declination, inclination data along a great circle or great circle arc with lines
+    """
+    
+    dirs = np.column_stack((dec, inc))
+
+    # split into upper and lower hemisphere arrays
+    upper = dirs[dirs[:, 1] < 0]
+    lower = dirs[dirs[:, 1] >= 0]
+
+    # sort the points in each arc
+    upper_sorted = sort_gc_pts(upper)
+    lower_sorted = sort_gc_pts(lower)
+    
+    # convert to X,Y stereonet coordinates    
+    X_dn, X_up, Y_dn, Y_up = [], [], [], []
+
+    for pt in upper_sorted:
+        X, Y = dimap(pt[0], pt[1])
+        X_up.append(X)
+        Y_up.append(Y)
+
+    for pt in lower_sorted:
+        X, Y = dimap(pt[0], pt[1])
+        X_dn.append(X)
+        Y_dn.append(Y)
+    
+    if len(X_up) > 1:
+        plt.plot(X_up, Y_up, color=up_color if up_color else color, linestyle=up_linestyle if up_linestyle else linestyle, linewidth=up_linewidth if up_linewidth else linewidth, 
+                 alpha=up_alpha if up_alpha else alpha, zorder=zorder)
+    if len(X_dn) > 1:
+        plt.plot(X_dn, Y_dn, color=dn_color if dn_color else color, linestyle=dn_linestlye if dn_linestyle else linestyle, linewidth=dn_linewidth if dn_linewidth else linewidth, 
+                 alpha=dn_alpha if dn_alpha else alpha, zorder=zorder)
+
+    if legend == 'yes': plt.legend(loc=2)
+    if title: plt.title(title)
+
+    plt.tight_layout()
+    
+
+def sort_gc_pts(dirs):
+
+    # get lowest inclination value
+    incs = abs(dirs[:, 1])
+    min_idx = np.argmin(incs)
+    min_dir = dirs[min_idx]
+    min_car = pro.to_car([min_dir])
+
+    # now convert the whole array to Cartesian coordinates
+    cars = pro.to_car(dirs)
+    angs = np.array([pro.angle(min_car[0], v) for v in cars])
+    
+    # get sorted indices and sort dirs
+    sorted_indices = np.argsort(angs)
+    sorted_dirs = dirs[sorted_indices]
+    
+    return sorted_dirs
+
 
 def circ(dec, inc, alpha, npts=201):
     """
