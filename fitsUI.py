@@ -166,7 +166,7 @@ class CoordinateSystem:
 
 class AxesProjection:
     """ Maintains the current axes projection and handles changes to it """
-    def __init__(self, projection=1):
+    def __init__(self, projection='N v. E/Dn'):
         self.projection = projection  # default projection
 
     def change_projection(self, new_projection):
@@ -213,7 +213,7 @@ class Interface:
         self.linmod_applied = False
 
         # initialize the coordinate system, projection and plotter classes
-        self.axes_projection = AxesProjection(projection=1)
+        self.axes_projection = AxesProjection(projection='N v. E/Dn')
         self.coordinate_system = CoordinateSystem(coordinates='specimen', manager=self.manager)
         self.plotter = Plotter()
 
@@ -270,7 +270,7 @@ class Interface:
 
     def coordinate_projection_widgets(self):
         """ Widgets controlling coordinate and projection settings """
-        self.projection_dropdown1 = widgets.Dropdown(options=[1, 2], value=self.axes_projection.projection, description='Projection:',
+        self.projection_dropdown1 = widgets.Dropdown(options=['N v. E/Dn', 'N/Up v. E'], value=self.axes_projection.projection, description='Projection:',
                                                 layout=widgets.Layout(width="250px", margin="0px 50px 0px 50px"))
         self.projection_dropdown1.observe(self.update_projections, names='value')
         
@@ -279,7 +279,7 @@ class Interface:
         self.coordinates_dropdown1.observe(self.update_coordinates, names='value')
 
         # this second set of dropdown menus corresponds to the lower plot (but their functionality is bound to the first set)
-        self.projection_dropdown2 = widgets.Dropdown(options=[1, 2], value=self.axes_projection.projection, description='Projection:',
+        self.projection_dropdown2 = widgets.Dropdown(options=['N v. E/Dn', 'N/Up v. E'], value=self.axes_projection.projection, description='Projection:',
                                                 layout=widgets.Layout(width="250px", margin="0px 50px 0px 50px"))
         self.projection_dropdown2.observe(self.update_projections, names='value')
 

@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as pgo
 import processing as pro
 
+import plotly.io as pio
+pio.renderers.default = "browser"
+
 ############# specimen-level plots #############
 
 def zij_plt(coordinates, projection, data, filtered, lines, planes):
@@ -29,7 +32,7 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
     
     ax1 = fig.add_subplot(gs[:3, 0]) # make the zijderveld diagram
     
-    if projection==1:  
+    if projection=='N v. E/Dn':  
         ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0) # plot all the data
         ax1.plot(data['x3'], data['x1'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal')  # plot the filtered subset of data
@@ -56,7 +59,7 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
         ax1.annotate(f"{Y}, {Z}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
         ax1.annotate(f"{X}", xy=(2*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
         
-    if projection==2:
+    if projection=='N/Up v. E':
         ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0) # plot all the data
         ax1.plot(data['x2'], -data['x3'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal') # plot the filtered subset of data
@@ -151,7 +154,7 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
     gs = fig.add_gridspec(3, 2)
     
     ax1 = fig.add_subplot(gs[:3, 0])
-    if projection==1:  
+    if projection=='N v. E/Dn':  
         ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax1.plot(data['x3'], data['x1'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal')
@@ -166,7 +169,7 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
         ax1.annotate(f"{Y}, {Z}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
         ax1.annotate(f"{X}", xy=(2*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
         
-    if projection==2:
+    if projection=='N/Up v. E':
         ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax1.plot(data['x2'], -data['x3'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal')
@@ -199,7 +202,7 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
     ldirs_scaled = [ldir * a for ldir, a in zip(ldirs, coefficients[0])]
     arrow_start = np.zeros(3, dtype=float)
     
-    if projection==1:  
+    if projection=='N v. E/Dn':  
         ax2.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax2.plot(data['x3'], data['x1'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax2.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5)
@@ -217,7 +220,7 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
         ax2.annotate(f"{Y}, {Z}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
         ax2.annotate(f"{X}", xy=(2*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
         
-    if projection==2:
+    if projection=='N/Up v. E':
         ax2.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax2.plot(data['x2'], -data['x3'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
         ax2.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5)
@@ -278,44 +281,49 @@ def interactive_zij_plt(coordinates, data, filtered, lines, planes, show_lines='
     # add the origin
     fig.add_trace(pgo.Scatter3d(x=[0], y=[0], z=[0], mode='markers', marker=dict(size=5, color='orange', opacity=1), showlegend=False))
     # add raw observations
-    fig.add_trace(pgo.Scatter3d(x=data['x1'], y=data['x2'], z=data['x3'], mode='markers', marker=dict(size=4, color='grey', opacity=0.25), showlegend=False))
+    fig.add_trace(pgo.Scatter3d(x=data['x2'], y=data['x1'], z=data['x3'], mode='markers', marker=dict(size=4, color='grey', opacity=0.25), showlegend=False))
     # add filtered data
-    fig.add_trace(pgo.Scatter3d(x=filtered['x1'], y=filtered['x2'], z=filtered['x3'], mode='markers', marker=dict(size=4, color='black', opacity=0.8), showlegend=False))
+    fig.add_trace(pgo.Scatter3d(x=filtered['x2'], y=filtered['x1'], z=filtered['x3'], mode='markers', marker=dict(size=4, color='black', opacity=0.8), showlegend=False))
 
     if show_lines == 'y':
     # add PCA segments
         for i in range(len(lines)):
             lseg = lines[i][7]
             color = lines[i][9]
-            fig.add_trace(pgo.Scatter3d(x=[lseg[0][0], lseg[1][0]], y=[lseg[0][1], lseg[1][1]],  z=[lseg[0][2], lseg[1][2]], mode="lines",
+            fig.add_trace(pgo.Scatter3d(x=[lseg[0][1], lseg[1][1]], y=[lseg[0][0], lseg[1][0]], z=[lseg[0][2], lseg[1][2]], mode="lines",
                 line=dict(width=5, color=color), opacity=0.5, name=f'Comp. {lines[i][1]}'))
 
     if show_planes == 'y':
     # add GC planes
         for i in range(len(planes)):
             nvec = planes[i][5]
-            xmax = data['x1'].abs().max()
-            ymax = data['x2'].abs().max()
+            xmax = data['x2'].abs().max()
+            ymax = data['x1'].abs().max()
             zmax = data['x3'].abs().max()
             xrange = np.linspace(-xmax, xmax, 5)
             yrange = np.linspace(-ymax, ymax, 5)
             xpl, ypl = np.meshgrid(xrange, yrange)
             if nvec[2] != 0:
-                zpl = (-nvec[0] * xpl - nvec[1] * ypl) / nvec[2]
+                zpl = (-nvec[1] * xpl - nvec[0] * ypl) / nvec[2]
             else:
                 return  # skipped if plane is perfectly horizontal
             fig.add_trace(pgo.Surface(x=xpl, y=ypl, z=zpl, colorscale=[[0, 'purple'], [1, 'purple']], opacity=0.2, showscale=False))
+
+    z_min = data['x3'].min()
+    z_max = data['x3'].max()
+    if z_min > 0: z_min = 0 
+    if z_max < 0: z_max = 0 
+    z_range = [z_max, z_min] # invert Z-axis range
     
-    fig.update_layout(scene=dict(xaxis_title=X, yaxis_title=Y, zaxis_title=Z, aspectmode="cube"), width=1200, height=800,
-                     margin=dict(l=20, r=20, t=15, b=15), legend=dict(font=dict(size=14), x=0.90,  y=0.90))
+    fig.update_layout(scene=dict(xaxis_title=Y, yaxis_title=X, zaxis_title=Z, zaxis=dict(range=z_range), aspectmode="cube"), 
+                      width=1200, height=800, margin=dict(l=20, r=20, t=15, b=15), legend=dict(font=dict(size=14), x=0.90,  y=0.90))
     
     fig.show()
 
 
 ############# site-/study-level plots #############
 
-
-def overview_plt(comp_dfs, fmeans, pests, mean_treatments, mean_coefficients, coordinates, colors):
+def stat_stereo(coordinates, selected, mean_data, show_lines=False, show_planes=False, show_normals=False, show_mad=False):
 
     if coordinates == 'specimen': 
         dec, inc = 'Ds', 'Is'
@@ -326,56 +334,115 @@ def overview_plt(comp_dfs, fmeans, pests, mean_treatments, mean_coefficients, co
     elif coordinates == 'tectonic': 
         dec, inc = 'Dt', 'It'
         gcpts = 'gct'
-    
-    n = len(comp_dfs) 
-    components = []
-    for df in comp_dfs: components.append(df['component'].iloc[0])
-    
-    fig = plt.figure(constrained_layout=True, figsize=(12, 18))
-    gs = fig.add_gridspec(nrows=n+3, ncols=2, height_ratios=[3] + [1]*(n+2))
 
-    ax1 = fig.add_subplot(gs[0, :])
+    c_labels, comp_dfs, lin_means, gc_ints, mix_means, gc_endpts, show_samples, c_colors = [], [], [], [], [], [], [], []
+    for i in range(len(mean_data)): 
+        c_labels.append(mean_data[i][0])
+        comp_dfs.append(mean_data[i][1])
+        lin_means.append(mean_data[i][2])
+        gc_ints.append(mean_data[i][3])
+        mix_means.append(mean_data[i][4])
+        gc_endpts.append(mean_data[i][5])
+        show_samples.append(mean_data[i][6])
+        c_colors.append(mean_data[i][7])
+
+    fig = plt.figure(constrained_layout=True, figsize=(6, 6))
     plot_net()
-    for i, df in enumerate(comp_dfs):
-        
-        #lines
-        ldf = df[df['fit_type'] == 'line']
-        plot_di(dec=[x for x in ldf[dec]], inc=[x for x in ldf[inc]], markersize=50, color=colors[i], alpha=0.5, label=f'comp. {components[i]}')
-        
-        #planes
-        gcdf = df[df['fit_type'] == 'plane']
-        gcs = gcdf[gcpts]
-        pesti = pests[i]
-        for j, gc in enumerate(gcs):
-            up_gcpts = gc[gc[:, 1] < 0]
-            dn_gcpts = gc[gc[:, 1] > 0]
-            plot_di(dec=[x for x in up_gcpts[:,0]], inc=[x for x in up_gcpts[:,1]], markersize=0.5, color='grey', alpha=0.2)
-            plot_di(dec=[x for x in dn_gcpts[:,0]], inc=[x for x in dn_gcpts[:,1]], markersize=0.5, color='purple', alpha=0.5)
-            plot_di(dec=pesti[j][0], inc=pests[j][1], marker='s', markersize=25, color='purple')
-        
-        #mean
-        plot_di_mean(dec=fmeans[i]['dec'], inc=fmeans[i]['inc'], a95=fmeans[i]['alpha95'], marker='*', markersize=100, color=colors[i]) #label=f'Comp. {components[i]} mean')
 
-    ax1.legend(loc='upper right', fontsize=12, markerscale=1.25)
+    # plot background data...
+    if show_lines:
+        lines = selected[selected['fit_type']=='line']
+        if show_mad:
+            for i, line in lines.iterrows():
+                plot_di_mean(dec=line[dec], inc=line[inc], a95=line['mad'], marker=None, color='k', alpha=0.1)
+        plot_di(dec=[x for x in lines[dec]], inc=[x for x in lines[inc]], markersize=20, color='k', alpha=0.3)
+
+    if show_planes:
+        planes = selected[selected['fit_type']=='plane']
+        gcs = planes[gcpts]
+        for gc in gcs:
+            plot_gc(dec=[x for x in gc[:,0]], inc=[x for x in gc[:,1]], color='k', up_linestyle='--', linewidth=1.25, alpha=0.3)
+
+    if show_normals:
+        planes = selected[selected['fit_type']=='plane']
+        if show_mad:
+            for i, plane in planes.iterrows():
+                plot_di_mean(dec=plane[dec], inc=plane[inc], a95=plane['mad'], marker=None, color='k', alpha=0.1)    
+        plot_di(dec=[x for x in planes[dec]], inc=[x for x in planes[inc]], marker='D', markersize=20, color='k', alpha=0.3)
+
+    # plot data contributing to mean calculation ...
+    for i in range(len(mean_data)):
+        if show_samples[i]:
+            df = comp_dfs[i]
+            if lin_means[i] or mix_means[i]:
+                lines = df[df['fit_type']=='line']
+                plot_di(dec=[x for x in lines[dec]], inc=[x for x in lines[inc]], markersize=20, color=c_colors[i], alpha=0.3)
+
+            if gc_ints[i] or mix_means[i]:
+                planes = df[df['fit_type']=='plane']
+                gcs = planes[gcpts]
+                for gc in gcs:
+                    plot_gc(dec=[x for x in gc[:,0]], inc=[x for x in gc[:,1]], color=c_colors[i], up_linestyle='--', linewidth=1.25, alpha=0.3)
+
+    # plot means 
+    for i in range(len(mean_data)):  # looping again to ensure that the means plot on top of all the constituent data from previous loop
+        # plot means
+        if lin_means[i]:
+            plot_di_mean(dec=lin_means[i]['dec'], inc=lin_means[i]['inc'], a95=lin_means[i]['alpha95'], marker='*', markersize=100, 
+                         color=c_colors[i], alpha=1, label=f"comp.{c_labels[i]} fisher mean")
+        if gc_ints[i]:
+            plot_di_mean(dec=gc_ints[i]['dec'], inc=gc_ints[i]['inc'], a95=gc_ints[i]['mad'], marker='^', markersize=100, linestyle='--', 
+                         color=c_colors[i], alpha=1, label=f"comp.{c_labels[i]} GC intersection")
+        if mix_means[i]:
+            plot_di_mean(dec=mix_means[i]['dec'], inc=mix_means[i]['inc'], a95=mix_means[i]['alpha95'], marker='P', markersize=100, 
+                         color=c_colors[i], alpha=1, label=f"comp.{c_labels[i]} mixed Fisher mean")
+        if gc_endpts[i]:
+            gc_array = np.array(gc_endpts[i])
+            plot_di(dec=gc_array[:,0], inc=gc_array[:,1], marker='s', markersize=20, color=c_colors[i], alpha=0.3)
+
+    if any(label is not None for label in [artist.get_label() for artist in plt.gca().get_legend_handles_labels()[0]]):
+        plt.legend()
+
+    plt.tight_layout()
+    plt.show()
 
     
-    axes = []
-    subplt_idx = 0
+
+def decay_spectra(components, df, mean_treatments, mean_coefficients, mean_dMdD, show_dMdD=False, AF_log=False):
+ 
+    n = len(components)
+    fig, axes = plt.subplots(n, 2, figsize=(18, 3.5 * n))
+    axes = axes.flatten()
+
+    k = 0
     for i in range(n):
-        df = comp_dfs[i]
-        df = df[df['fit_type']=='line']
+        comp = components[i]
+        ldf = df[(df['component'] == comp) & (df['fit_type'] == 'line')]
         
         for j in range(2):
-            ax = fig.add_subplot(gs[i + 1, j])
-            axes.append(ax)
+            ax = axes[k]
+            ax_twin = ax.twinx()
+            
             if j == 0:
-                dfAF = df[df['demag'] == 'AF']
-                for treatment, coefficients in zip(dfAF['treatment'], dfAF['coefficients']):
-                    ax.plot(treatment, abs(coefficients), color=colors[i], alpha=0.5)
-                ax.plot(mean_treatments[subplt_idx], mean_coefficients[subplt_idx], color=colors[i], linewidth=2, label=f'comp. {components[i]}')
-                if len(mean_treatments[subplt_idx]) > 0: 
-                    ax.legend(loc='upper right')
+                AF_ldf = ldf[ldf['demag'] == 'AF']
+                for treatment, coefficients in zip(AF_ldf['treatment'], AF_ldf['coefficients']):
+                    ax.plot(treatment, abs(coefficients), color='blue', alpha=0.5)
+                if mean_treatments[k] is not None and mean_coefficients[k] is not None and len(mean_treatments[k]) > 0 and len(mean_coefficients[k]) > 0:
+                    ax.plot(mean_treatments[k], mean_coefficients[k], color='darkblue', linewidth=2, label=f'comp. {comp} mean decay')
+                    if show_dMdD:
+                        ax_twin.plot(mean_treatments[k], mean_dMdD[k], color='darkblue', linestyle='--', linewidth=1, alpha=0.5, label=f'comp. {comp} dM/dD')
+                if AF_log: ax.set_yscale('log')
                 ax.set_ylabel('remanent contribution')
+                if show_dMdD:
+                    ax_twin.set_ylabel('dM/dD')
+                    ax_twin.invert_yaxis()
+                    ax_twin.set_yticks([])
+                    ax_twin.set_yticklabels([])
+                    lines, labels = ax.get_legend_handles_labels()
+                    lines2, labels2 = ax_twin.get_legend_handles_labels()
+                    ax.legend(lines + lines2, labels + labels2, loc='upper right')
+                else: ax.legend(loc='upper right')
+                
                 if i == 0:
                     ax.set_title('AF demagnetization spectra')
                 if i == n-1:
@@ -383,27 +450,29 @@ def overview_plt(comp_dfs, fmeans, pests, mean_treatments, mean_coefficients, co
                 else: ax.set_xticks([])
                         
             else:
-                dfTH = df[df['demag'] == 'TH']
-                for treatment, coefficients in zip(dfTH['treatment'], dfTH['coefficients']):
-                    ax.plot(treatment, abs(coefficients), color=colors[i], alpha=0.5)
-                ax.plot(mean_treatments[subplt_idx], mean_coefficients[subplt_idx], color=colors[i], linewidth=2, label=f'comp. {components[i]}')
-                if len(mean_treatments[subplt_idx]) > 0: 
-                    ax.legend(loc='upper right')
+                TH_ldf = ldf[ldf['demag'] == 'TH']
+                for treatment, coefficients in zip(TH_ldf['treatment'], TH_ldf['coefficients']):
+                    ax.plot(treatment, abs(coefficients), color='red', alpha=0.5)
+                if mean_treatments[k] is not None and mean_coefficients[k] is not None and len(mean_treatments[k]) > 0 and len(mean_coefficients[k]) > 0:
+                    ax.plot(mean_treatments[k], mean_coefficients[k], color='darkred', linewidth=2, label=f'comp. {comp} mean deacy')
+                    if show_dMdD:
+                        ax_twin.plot(mean_treatments[k], mean_dMdD[k], color='darkred', linestyle='--', linewidth=1, alpha=0.5, label=f'comp. {comp} dM/dD')
+                if show_dMdD:
+                    ax_twin.set_ylabel('dM/dD')
+                    ax_twin.invert_yaxis()
+                    ax_twin.set_yticks([])
+                    ax_twin.set_yticklabels([])
+                    lines, labels = ax.get_legend_handles_labels()
+                    lines2, labels2 = ax_twin.get_legend_handles_labels()
+                    ax.legend(lines + lines2, labels + labels2, loc='upper right')
+                else: ax.legend(loc='upper right')
+                
                 if i == 0:
                     ax.set_title('Thermal demagnetization spectra')
                 if i == n-1:
                     ax.set_xlabel('treatment (deg.)')
-                else: ax.set_xticks([]) 
-
-            subplt_idx+=1
-    
-    for i in range(len(axes)):
-        if i % 2 == 0: 
-            axes[i].sharex(axes[-2])
-        else:
-            axes[i].sharex(axes[-1])
-    
-    plt.subplots_adjust(wspace=0.1, hspace=0.15)
+                else: ax.set_xticks([])
+            k+=1
               
     plt.show()
 
@@ -498,17 +567,18 @@ def plot_di(dec, inc, color='k', marker='o', markersize=20, legend='no', label='
 
     plt.tight_layout()
 
-def plot_di_mean(dec, inc, a95, color='k', marker='o', markersize=20, label='', legend='no', alpha=1, zorder=2):
+def plot_di_mean(dec, inc, a95, color='k', marker='o', markersize=20, linewidth=1, linestyle='-', alpha=1, label='', legend='no', zorder=2):
     """
     Plot a mean direction with alpha_95 ellipse.
     """
     DI_dimap = dimap(dec, inc)
-    plt.scatter(DI_dimap[0], DI_dimap[1], edgecolors=color, facecolors='white' if inc < 0 else color, marker=marker, s=markersize, label=label, zorder=zorder)
+    if marker:
+        plt.scatter(DI_dimap[0], DI_dimap[1], edgecolors=color, facecolors='white' if inc < 0 else color, marker=marker, s=markersize, label=label, alpha=alpha, zorder=zorder)
 
     # Get the circle points corresponding to a95 and plot them
     Da95, Ia95 = circ(dec, inc, a95)
     Xcirc, Ycirc = zip(*[dimap(D, I) for D, I in zip(Da95, Ia95)])
-    plt.plot(Xcirc, Ycirc, c=color)
+    plt.plot(Xcirc, Ycirc, c=color, linewidth=linewidth, linestyle=linestyle, alpha=alpha)
 
     plt.tight_layout()
 

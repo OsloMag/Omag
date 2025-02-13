@@ -103,10 +103,10 @@ def process_pkl(data_dict):
                 demag.append(demag_type)
 
                 if split_coeffs is None:
-                    print (f'The number of line fits and coefficient arrays does not match for {key}; not passing any coefficients')
+                    #print (f'The number of line fits and coefficient arrays does not match for {key}; not passing any coefficients')
                     coefficients.append(None)
                 elif len(split_coeffs) != len(sub_dict['lines']):
-                    print (f'The number of line fits and coefficient arrays does not match for {key}; not passing any coefficients')
+                    #print (f'The number of line fits and coefficient arrays does not match for {key}; not passing any coefficients')
                     coefficients.append(None)
                 else:
                     coefficients.append(np.array(split_coeffs[i]))
@@ -271,7 +271,7 @@ def doPCA_anchored(vecs):
     Does Single value decomposition (PCA with data anchored to the origin)
     Input: [[x, y, z], ..., [x, y, z]];  Output: eigenvectors, eigenvalues
     """
-    pca = TruncatedSVD(n_components=3)  # make PCA object
+    pca = TruncatedSVD(n_components=3, algorithm='randomized')  # make PCA object
     evecs = pca.fit(vecs).components_      # fit components and get eigenvectors (does not remove the mean to re-center the data)
     svals = np.sort(pca.singular_values_)[::-1]  # get the single values 
     evals = (svals ** 2) / len(vecs)   # convert single values to equivalent eigenvalues
@@ -496,9 +496,9 @@ def get_fisher_mean(df, coordinates, flip=False, w_gcs=False):
     ldf = df[df['fit_type'] == 'line']
     gcdf = df[df['fit_type'] == 'plane']
     
-    if len(ldf) <= 2:
-        print ('not enough lines to compute Fisher mean')
-        return
+    if len(ldf) <= 2 and not w_gcs:
+        print ('too few lines to compute Fisher mean')
+        return None, None
 
     if coordinates == 'specimen': 
         decs, incs = ldf['Ds'], ldf['Is']
@@ -514,7 +514,7 @@ def get_fisher_mean(df, coordinates, flip=False, w_gcs=False):
 
     if flip:
         normal, flipped = do_flip(DI)
-        if len(flipped) != 0: 
+        if flipped: 
             print (f'{len(flipped)} directions flipped')
             DI = normal + flipped
     
@@ -598,6 +598,30 @@ def iterative_fisher_mean(DI, gcs):
     return fin_fmean, nearest_list
 
 
+def gc_intersection(df, coordinates):
+    """ ... """
+
+    df = df[df['fit_type'] == 'plane']
+    if len(df) < 4:
+        print ('too few planes to conduct intersection analysis')
+        return None
+    
+    if coordinates == 'specimen': 
+        decs, incs = df['Ds'], df['Is']
+    elif coordinates == 'geographic': 
+        decs, incs = df['Dg'], df['Ig']
+    elif coordinates == 'tectonic': 
+        decs, incs = df['Dt'], df['It']
+
+    DI = np.column_stack((decs, incs))
+    vecs = to_car(DI)
+
+    v3, mad, _ = gcfit(vecs, normalize=True, constraints=False)
+    v3dir = to_sph([v3])
+    idir = {'dec': v3dir[0][0], 'inc': v3dir[0][1], 'mad': mad, 'n': len(df)}
+
+    return idir
+
 ############## Taken from Pmagpy ... need to fix ##############
 
 def fisher_mean(dirs):
@@ -639,9 +663,9 @@ def fisher_mean(dirs):
 
 
 def do_flip(dirs):
-    """..."""
+    """ checks if there appear to be 2 polarity sets in a population of directions. Returns the larger of the two groups, and the 'inverted' one. """
     vecs = to_car(dirs)
-    evecs,_,_ = doPCA(vecs)  # get principle direction
+    evecs, _ = doPCA_anchored(vecs)  # get principle direction
     ev1 = evecs[0]
 
     p1, p2 = [], []
@@ -652,22 +676,21 @@ def do_flip(dirs):
         else:
             p2.append(dirs[i])
 
-    print ('p1:', p1)
-    print ('p2:', p2)
     if len(p1) == 0: 
-        return p2
+        return p2, None
     elif len(p2) == 0: 
-        return p1
-    elif len(p1) > len(p2):
+        return p1, None
+    elif len(p1) >= len(p2):
         for i, rec in enumerate(p2):
             d, i = (rec[0] - 180.) % 360., -rec[1]
             p2[i] = np.array([d, i])
-    elif len(p1) < len(p2):
+        return p1, p2
+    else:
         for i, rec in enumerate(p1):
             d, i = (rec[0] - 180.) % 360., -rec[1]
             p1[i] = np.array([d, i])
+        return p2, p1
 
-    return p1+p2
 
 ############## Output ##############
 
@@ -714,18 +737,22 @@ def cycle_autoPCA(fspec, weight, penalty):
                f"pc3: {res[0][2]}-{res[1][2]} (n={res[2][2]}), MAD={res[3][2]:.2f}; score: {res[4]:.2f}")
 
 
-def mean_decay(comp_dfs):
+def mean_decay(components, df):
 
     mean_treatments = []
     mean_coefficients = []
-    for df in comp_dfs:       
-        ldf = df[df['fit_type'] == 'line']
-
+    mean_dMdD = []
+    for c in components:
+        ldf = df[(df['component'] == c) & (df['fit_type'] == 'line')]
+        
         # do AF first
-        AFdf = ldf[ldf['demag'] == 'AF']
+        AFdf = ldf[(ldf['demag'] == 'AF') &
+           (ldf['treatment'].apply(lambda x: x is not None and len(x) > 0)) &
+           (ldf['coefficients'].apply(lambda x: x is not None and len(x) > 0))]
         if len(AFdf) == 0:
-            mean_treatments.append([])
-            mean_coefficients.append([])
+            mean_treatments.append(None)
+            mean_coefficients.append(None)
+            mean_dMdD.append(None)
         else:
             treatments = AFdf['treatment'].reset_index(drop=True)
             coefficients = AFdf['coefficients'].reset_index(drop=True)
@@ -749,16 +776,23 @@ def mean_decay(comp_dfs):
             
             # Use the longest treatment sequence as the reference for final output
             ref_treat_steps = np.arange(0, max_length * 1, 1)  # Ensures consistent x-axis
+
+            # approximate first derivative
+            dMdD = np.gradient(mean_interp_coeffs, ref_treat_steps)
         
             # Store results
             mean_treatments.append(ref_treat_steps)
             mean_coefficients.append(mean_interp_coeffs)
+            mean_dMdD.append(dMdD)
 
         # do TH
-        THdf = ldf[ldf['demag'] == 'TH']
+        THdf = ldf[(ldf['demag'] == 'TH') &
+           (ldf['treatment'].apply(lambda x: x is not None and len(x) > 0)) &
+           (ldf['coefficients'].apply(lambda x: x is not None and len(x) > 0))]
         if len(THdf) == 0:
-            mean_treatments.append([])
-            mean_coefficients.append([])
+            mean_treatments.append(None)
+            mean_coefficients.append(None)
+            mean_dMdD.append(None)
         else:
             treatments = THdf['treatment'].reset_index(drop=True)
             coefficients = THdf['coefficients'].reset_index(drop=True)
@@ -782,10 +816,14 @@ def mean_decay(comp_dfs):
             
             # Use the longest treatment sequence as the reference for final output
             ref_treat_steps = np.arange(0, max_length * 5, 5)  # Ensures consistent x-axis
+
+            # approximate first derivative
+            dMdD = np.gradient(mean_interp_coeffs, ref_treat_steps)
         
             # Store results
             mean_treatments.append(ref_treat_steps)
             mean_coefficients.append(mean_interp_coeffs)
+            mean_dMdD.append(dMdD)
 
-    return (mean_treatments, mean_coefficients)
+    return (mean_treatments, mean_coefficients, mean_dMdD)
         
