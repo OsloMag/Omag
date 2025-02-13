@@ -5,7 +5,7 @@ import plotly.graph_objects as pgo
 import processing as pro
 
 import plotly.io as pio
-pio.renderers.default = "browser"
+pio.renderers.default = "iframe"
 
 ############# specimen-level plots #############
 
