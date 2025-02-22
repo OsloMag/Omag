@@ -5,6 +5,7 @@ import numpy as np
 import pickle
 import processing as pro
 import plotting as plo
+import time
 
 
 ######### Manager class ############ 
@@ -19,6 +20,7 @@ class FitsManager:
         self.interface_area = Output()
         self.specimen_names = None    # list over the specimen / sample names in the file
         self.selected_specimen_name = None
+        self.time = time.time()
 
         # import the data
         self.get_data()               # calls method to import the data
@@ -28,6 +30,10 @@ class FitsManager:
             self.selected_specimen_name = self.specimen_names[0]  # defaults to first specimen in the infile
             self.setup_widgets()           # setup initial widgets
             self.specimen = Specimen(manager=self)   # initialize Specimen class
+
+            self.coordinate_system = CoordinateSystem(coordinates='specimen', manager=self)
+            self.axes_projection = AxesProjection(projection='N v. E/Dn', manager=self)
+            self.plotter = Plotter(manager=self)
 
             with self.interface_area:
                 clear_output(wait=True)
@@ -44,6 +50,11 @@ class FitsManager:
         # jr6 files with the .jr6 suffix
         elif self.infile.endswith('.jr6'):
             self.df = pro.import_jr6(self.infile)  # use a dataframe temporarily to hold the data
+            self.init_dict() # set up the dictionary to pass the data into
+
+        # 2G files with the .dat suffix
+        elif self.infile.endswith('.dat'):
+            self.df = pro.import_2G(self.infile)  # use a dataframe temporarily to hold the data
             self.init_dict() # set up the dictionary to pass the data into
 
         # other file-types to be added later
@@ -166,8 +177,9 @@ class CoordinateSystem:
 
 class AxesProjection:
     """ Maintains the current axes projection and handles changes to it """
-    def __init__(self, projection='N v. E/Dn'):
+    def __init__(self, projection='N v. E/Dn', manager=None):
         self.projection = projection  # default projection
+        self.manager = manager
 
     def change_projection(self, new_projection):
         """ Change the current projection """
@@ -182,11 +194,19 @@ class AxesProjection:
         
 class Plotter:
     """ Class to handle plotting methods """
+    def __init__(self, manager=None):
+        self.manager = manager
+        
+    """ Class to handle plotting methods """
     def update_zij_plot(self, coordinates, projection, specimen, lines=[], planes=[], plot_output_area=None):
-        """ Update the Zijderveld plot """            
+        """ Update the Zijderveld plot """ 
+        print ('elapsed time1:', time.time() - self.manager.time)
+        self.manager.time = time.time()
         with plot_output_area:
             clear_output(wait=True)
             plo.zij_plt(coordinates, projection, specimen.get_raw_specimen(), specimen.get_filtered_specimen(), lines, planes)
+
+        print ('elapsed time2:', time.time() - self.manager.time)
 
     def update_linmod_plot(self, coordinates, projection, specimen, lines, fitted_points, coefficients, coefficients_norm, plot_output_area=None):
         """ Update the Linear Model plot """
@@ -194,6 +214,7 @@ class Plotter:
             clear_output(wait=True)
             plo.linzij_plt(coordinates, projection, specimen.get_raw_specimen(), specimen.get_filtered_specimen(), lines, fitted_points, coefficients, coefficients_norm)
 
+        print ('elapsed time:', time.time() - self.manager.time)
 
 ######### Interface class ############ 
             
@@ -206,6 +227,8 @@ class Interface:
         self.fitted_points = None
         self.coefficients = []
         self.coefficients_norm = []
+        self.updating_projection = False
+        self.updating_coordinates = False
 
         if self.lines != [] or self.planes != []:  # check if there already exists fitted data
             self.fits_applied = True
@@ -213,15 +236,12 @@ class Interface:
         self.linmod_applied = False
 
         # initialize the coordinate system, projection and plotter classes
-        self.axes_projection = AxesProjection(projection='N v. E/Dn')
-        self.coordinate_system = CoordinateSystem(coordinates='specimen', manager=self.manager)
-        self.plotter = Plotter()
+        self.axes_projection = self.manager.axes_projection 
+        self.coordinate_system = self.manager.coordinate_system
+        self.plotter = self.manager.plotter
 
         # ensure that specimen is in the right coordinates
-        if self.specimen.raw.get('coordinates') is not None:
-            initial_coordinates = self.specimen.raw['coordinates'].iloc[0]
-        else: initial_coordinates = 'specimen'
-        self.coordinate_system.change_coordinates(initial_coordinates, self.specimen)
+        self.coordinate_system.change_coordinates(self.coordinate_system.get_coordinates(), self.specimen)
 
         # setup widgets
         self.sample_selection_widgets()
@@ -250,7 +270,9 @@ class Interface:
 
 
         # refresh the Zijderveld
-        self.plotter.update_zij_plot(self.coordinate_system.coordinates, self.axes_projection.projection, self.specimen, self.lines, self.planes, plot_output_area=self.plot_output_area1)
+        if self.fits_applied: self.apply_fits()
+        else:  
+            self.plotter.update_zij_plot(self.coordinate_system.coordinates, self.axes_projection.projection, self.specimen, self.lines, self.planes, plot_output_area=self.plot_output_area1)
     
     
     #### Widgets setup ####
@@ -385,21 +407,34 @@ class Interface:
     
     def update_projections(self, change):
         """ Update the axes projection based on user selection """
+        if self.updating_projection:
+            return
+        self.updating_projection = True
+        
+        self.manager.time = time.time()
+        
         new_projection = change['new']
         self.projection_dropdown1.value = new_projection
         self.projection_dropdown2.value = new_projection       
         self.axes_projection.change_projection(new_projection)
 
-        if self.fits_applied: self.apply_fits()   # if fits have been applied, re-compute them; otherwise update Zijderveld with just the data
+        if self.fits_applied: self.apply_fits()   # if fits have been applied, re-compute them; otherwise update Zijderveld with just the data ### IS THIS REALLY NEEDED?
         else:
             self.plotter.update_zij_plot(self.coordinate_system.coordinates, self.axes_projection.projection, self.specimen, self.lines, self.planes, plot_output_area=self.plot_output_area1)
             
         if self.linmod_applied:                   # update the lower panels too if need be...
             self.plotter.update_linmod_plot(self.coordinate_system.coordinates, self.axes_projection.projection, self.specimen, 
                                             self.lines, self.fitted_points, self.coefficients, self.coefficients_norm, plot_output_area=self.plot_output_area2)
+        self.updating_projection = False
     
     def update_coordinates(self, change):
         """ Update the coordinate system based on user selection """
+        if self.updating_coordinates:
+            return
+        self.updating_coordinates = True
+        
+        self.manager.time = time.time()
+        
         new_coordinates = change['new']
         self.coordinates_dropdown1.value = new_coordinates
         self.coordinates_dropdown2.value = new_coordinates  
@@ -410,6 +445,8 @@ class Interface:
             self.plotter.update_zij_plot(self.coordinate_system.coordinates, self.axes_projection.projection, self.specimen, self.lines, self.planes, plot_output_area=self.plot_output_area1)
 
         if self.linmod_applied: self.run_linear_model()  # update the lower panels too if need be...
+        
+        self.updating_coordinates = False
 
     def on_left_arrow_click(self, b=None):
         """  Move backwards through specimen list """
@@ -589,6 +626,9 @@ class Interface:
 
     def run_linear_model(self, b=None):
         """ Execute linear modelling routine """
+
+        self.manager.time = time.time()
+        
         fspec = self.specimen.get_filtered_specimen()
         lines = self.get_lines()
         self.fitted_points, self.coefficients, self.coefficients_norm = pro.dirmod(np.column_stack((fspec['x1'], fspec['x2'], fspec['x3'])), [x[5] for x in lines])

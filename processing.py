@@ -53,6 +53,134 @@ def import_jr6(filename):
     
     return df
 
+def import_2G_binary(filename):
+    """ Imports 2G binary .dat file into Pandas DataFrame """
+
+    def find_next(line, idx):
+        """ find non-zero entries in binary header """
+        for next_idx in range(idx, len(line)):
+            if line[next_idx] not in {b'\x00', b'\x01', b''}:
+                next_item = line[next_idx].decode(errors='ignore')
+                return next_item, next_idx
+
+    with open(filename, 'rb') as datafile:
+        raw = datafile.read()
+        split_raw = raw.split(b'\xcd')  # split data file into lines
+    
+        # collect header data
+        line1 = split_raw[0]
+        parts = [x for x in line1.split(b'\x00')]
+        idx = parts.index(b'\x88')
+        specimen, idx = find_next(parts, idx+1)   # get the specimen name
+        vol, idx = find_next(parts, idx+1)        # get specimen volume
+        date, idx = find_next(parts, idx+1)       # get date 
+        idx+=1                                    # grab comment if present (or empty space if not)
+        comment = parts[idx].decode(errors='ignore')
+
+        azimuth, idx = find_next(parts, idx+1)
+        plunge, idx = find_next(parts, idx+1) 
+        dip_dir, idx = find_next(parts, idx+1) 
+        dip, idx = find_next(parts, idx+1) 
+
+        vol = float(vol)
+        azimuth = float(azimuth)
+        plunge = float(plunge)
+        dip_dir = float(dip_dir)
+        dip = float(dip)
+    
+        # collect measurement data
+        demag = []
+        Ds, Is, Dg, Ig, Dt, It = [], [], [], [], [], []
+        M, J = [], []
+        X, SX, NX, EX = [], [], [], []
+        Y, SY, NY, EY = [], [], [], []
+        Z, SZ, NZ, EZ = [], [], [], []
+        SN, SD, SH = [], [], []
+        axis, mdate = [], []
+        
+        for line in split_raw[1::]:
+            data = [x for x in line.split(b'\x00') if x]
+            
+            demag.append(data[0].decode(errors='ignore'))
+            Ds.append(float(data[1].decode(errors='ignore')))
+            Is.append(float(data[2].decode(errors='ignore')))
+            Dg.append(float(data[3].decode(errors='ignore')))
+            Ig.append(float(data[4].decode(errors='ignore')))
+            Dt.append(float(data[5].decode(errors='ignore')))
+            It.append(float(data[6].decode(errors='ignore')))
+            M.append(float(data[7].decode(errors='ignore')))
+            J.append(float(data[8].decode(errors='ignore')))
+            X.append(float(data[9].decode(errors='ignore')))
+            SX.append(float(data[10].decode(errors='ignore')))
+            NX.append(int(data[11].decode(errors='ignore')))
+            EX.append(float(data[12].decode(errors='ignore')))
+            Y.append(float(data[13].decode(errors='ignore')))
+            SY.append(float(data[14].decode(errors='ignore')))
+            NY.append(int(data[15].decode(errors='ignore')))
+            EY.append(float(data[16].decode(errors='ignore')))
+            Z.append(float(data[17].decode(errors='ignore')))
+            SZ.append(float(data[18].decode(errors='ignore')))
+            NZ.append(int(data[19].decode(errors='ignore')))
+            EZ.append(float(data[20].decode(errors='ignore')))
+            SN.append(float(data[21].decode(errors='ignore')))
+            SD.append(float(data[22].decode(errors='ignore')))
+            SH.append(float(data[23].decode(errors='ignore')))
+            axis.append(data[24].decode(errors='ignore'))
+            mdate.append(data[25].decode(errors='ignore'))
+
+    # pass all the data into a dataframe
+    dict_2G = {'DEMAG': demag, 'Ds': Ds, 'Is': Is, 'Dg': Dg, 'Ig': Ig, 'Dt': Dt, 'It': It, 'M': M, 'J': J, 
+                 'X': X, 'SX': SX, 'NX': NX, 'EX': EX, 'Y': Y, 'SY': SY, 'NY': NY, 'EY': EY, 'Z': Z, 'SZ': SZ, 'NZ': NZ, 'EZ': EZ,
+                 'SN': SN, 'SD': SD, 'SH': SH, 'axis': axis, 'mdate': mdate}
+    
+    df_2G = pd.DataFrame(dict_2G)
+    df_2G['specimen'] = specimen
+    df_2G['vol'] = vol
+    df_2G['az'] = azimuth
+    df_2G['plunge'] = plunge
+    df_2G['bed_dip_dir'] = dip_dir
+    df_2G['bed_dip'] = dip
+    df_2G['comment'] = comment
+    
+    return df_2G
+
+def import_2G(filename):
+    """ Imports 2G data file and returns the reformatted data in a Pandas dataframe """
+
+    df = import_2G_binary(filename)  # import the 2G data and get into a dataframe
+
+    # parse the demag steps
+    df['demag'] = None
+    df['treatment'] = 'unknown'
+    for idx, val in df['DEMAG'].items():
+        if 'mT' in val:
+            df.at[idx, 'demag'] = 'AF'
+            df.at[idx, 'treatment'] = int(val.replace('mT', ''))
+        elif 'C' in val:
+            df.at[idx, 'demag'] = 'TH'
+            df.at[idx, 'treatment'] = int(val.replace('C', ''))
+        elif 'NRM' in val:
+            df.at[idx, 'demag'] = 'None'
+            df.at[idx, 'treatment'] = 0
+        else:
+            df.at[idx, 'demag'] = 'unknown'
+            df.at[idx, 'treatment'] = val
+
+    # convert the measurements from emu to A/m
+    df[['X', 'Y', 'Z']] = df[['X', 'Y', 'Z']].div(df['vol'], axis=0) # divide by volume to get magnetization    
+    df[['x', 'y', 'z']] = df[['X', 'Y', 'Z']].mul(1000)  # convert from emu/cc to A/m
+    df['res'] = np.linalg.norm(df[['x', 'y', 'z']], axis=1)  # compute resultant
+
+    # compute dec and inc in specimen coordinates
+    dec_inc = to_sph(df[['x', 'y', 'z']].values)
+    df[['sdec', 'sinc']] = dec_inc
+    
+    df['hade'] = 90-df['plunge']
+    
+    selected_columns = ['specimen', 'demag', 'treatment', 'x', 'y', 'z', 'res', 'sdec', 'sinc', 'az', 'hade', 'bed_dip', 'bed_dip_dir']
+    df_reformatted = df[selected_columns]
+
+    return df_reformatted
 
 def process_pkl(data_dict):
     """ Imports pickled data saved by mag_fits notebook for processing in mag_stats notebook """
@@ -448,10 +576,13 @@ def dirmod(observed, v1s):
         init_guess = [1] * len(v1s)
         constraints = []
         if prev_params is not None:
-            constraints = [
-                {'type': 'ineq', 'fun': lambda params, idx=idx: abs(prev_params[idx]) - abs(params[idx])}
-                for idx in range(len(v1s))]
-
+            # apply constraints
+            for idx in range(len(v1s)):
+                # magnitude constraint: current coefficient magnitude <= previous coefficient magnitude
+                constraints.append({'type': 'ineq', 'fun': lambda params, idx=idx: abs(prev_params[idx]) - abs(params[idx])})
+                # sign constraint: the sign of the current coefficient should be the same as the previous one
+                constraints.append({'type': 'ineq', 'fun': lambda params, idx=idx: params[idx] * prev_params[idx]})
+            
         result = minimize(cost_func, init_guess, args=(obs,), method='SLSQP', constraints=constraints)
         params = result.x
 

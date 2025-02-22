@@ -7,27 +7,62 @@ import processing as pro
 import plotly.io as pio
 pio.renderers.default = "iframe"
 
+import time
+
+def get_scaled_axes(ax):
+
+    #ensure that both ranges include zero
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    xmin, xmax = min(xmin, 0), max(xmax, 0)
+    ymin, ymax = min(ymin, 0), max(ymax, 0)
+
+    # find the larger range, get means and set new ranges
+    max_range = max(abs(xmax-xmin), abs(ymax-ymin))
+    xmean, ymean = (xmax+xmin) / 2, (ymax+ymin) / 2
+    xrange = [xmean-max_range/2, xmean+max_range/2]
+    yrange = [ymean-max_range/2, ymean+max_range/2]
+
+    # get ticks
+    tick_unit = max_range/5
+    xticks_pos = np.arange(0, xrange[1], tick_unit)
+    xticks_neg = np.arange(0, xrange[0], -tick_unit)
+    xticks = np.concatenate((xticks_neg[::-1], xticks_pos[1:]))
+    yticks_pos = np.arange(0, yrange[1], tick_unit)
+    yticks_neg = np.arange(0, yrange[0], -tick_unit)
+    yticks = np.concatenate((yticks_neg[::-1], yticks_pos[1:]))
+
+    # apply to axes
+    ax.set_xlim(xrange)
+    ax.set_ylim(yrange)
+    ax.set_xticks(xticks)
+    ax.set_yticks(yticks)
+
+    return ax, tick_unit
+
+    
 ############# specimen-level plots #############
 
 def zij_plt(coordinates, projection, data, filtered, lines, planes):
     """
     Makes an orthogonal vector (e.g. Zijderveld) plot together with a stereoplot and a remanence decay plot.
     """
+
+    time1 = time.time()
+    
     if coordinates == 'specimen':
         X, Y, Z, negZ = 'X', 'Y', 'Z', '-Z'
     elif coordinates in ['geographic', 'tectonic']:
         X, Y, Z, negZ = 'N', 'E', 'Down', 'Up'
         
-    if not lines:
-        lnames, lpts, ldirs, lmads, lsegs, lcolors = [], [], [], [], [], []
-    else:
+    if lines:
         lnames, lpts, ldirs, lmads, lsegs, lcolors = zip(*[(line[1], line[2], line[5], line[6], line[7], line[9]) for line in lines])
-    if not planes:
-        gcnames, gcpts, ndirs, gcmads, gcsegs, gccolors = [], [], [], [], [], []
-    else:
+    if planes:
         gcnames, gcpts, ndirs, gcmads, gcsegs, gccolors = zip(*[(plane[1], plane[2], plane[5], plane[6], plane[7], plane[9]) for plane in planes])
 
-    fig = plt.figure(constrained_layout=True, figsize=(16,8))
+    fig = plt.figure(constrained_layout=True, figsize=(16,8))  
+    annotations, annotation_positions = [], [] 
+    
     gs = fig.add_gridspec(3, 2)
     
     ax1 = fig.add_subplot(gs[:3, 0]) # make the zijderveld diagram
@@ -38,26 +73,29 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
         ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal')  # plot the filtered subset of data
         ax1.plot(filtered['x3'], filtered['x1'], marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
 
-        for i in range(len(lines)):
-            ax1.plot(lpts[i]['x2'], lpts[i]['x1'], marker='o', color=lcolors[i], linestyle='none', label=f'comp. {lnames[i]}') # plot the fitted points
-            ax1.plot(lpts[i]['x3'], lpts[i]['x1'], marker='o', markerfacecolor='none', markeredgecolor=lcolors[i], markeredgewidth=1.5, linestyle='none')
-            lstart = lsegs[i][0]
-            lend = lsegs[i][1]
-            ax1.plot([lstart[1], lend[1]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5) # plot the principal component
-            ax1.plot([lstart[2], lend[2]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5)
+        if lines:
+            for i in range(len(lines)):
+                ax1.plot(lpts[i]['x2'], lpts[i]['x1'], marker='o', color=lcolors[i], linestyle='none', label=f'comp. {lnames[i]}') # plot the fitted points
+                ax1.plot(lpts[i]['x3'], lpts[i]['x1'], marker='o', markerfacecolor='none', markeredgecolor=lcolors[i], markeredgewidth=1.5, linestyle='none')
+                lstart = lsegs[i][0]
+                lend = lsegs[i][1]
+                ax1.plot([lstart[1], lend[1]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5) # plot the principal component
+                ax1.plot([lstart[2], lend[2]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5)
 
         x_lim = ax1.get_xlim()
         y_lim = ax1.get_ylim()
-        for i, (y, x) in enumerate(zip(data['x2'], data['x1'])):
-            x_offset = 0.01 * (x_lim[1] - x_lim[0]) 
-            y_offset = 0.01 * (y_lim[1] - y_lim[0])
-            ax1.text(y - x_offset, x + y_offset, str(i), fontsize=7, color='k', ha='right', va='bottom')  # plot axes labels
-        for i, (z, x) in enumerate(zip(data['x3'], data['x1'])):
-            x_offset = 0.01 * (x_lim[1] - x_lim[0])
-            z_offset = 0.01 * (y_lim[1] - y_lim[0])
-            ax1.text(z + x_offset, x + z_offset, str(i), fontsize=7, color='grey', ha='left', va='bottom')
-        ax1.annotate(f"{Y}, {Z}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
-        ax1.annotate(f"{X}", xy=(2*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
+        x_offset = 0.015 * (x_lim[1] - x_lim[0]) 
+        y_offset = 0.01 * (y_lim[1] - y_lim[0])
+        for i, (x, y) in enumerate(zip(data['x2'], data['x1'])):
+            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='k', ha='center', va='center')  # plot axes labels
+            annotations.append(ann)
+            annotation_positions.append((x, y))
+        for i, (x, y) in enumerate(zip(data['x3'], data['x1'])):
+            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='grey', ha='center', va='center')
+            annotations.append(ann)
+            annotation_positions.append((x, y))
+        ax1.set_xlabel(f"{Y}, {Z}", loc='right')
+        ax1.set_ylabel(f"{X}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
         
     if projection=='N/Up v. E':
         ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0) # plot all the data
@@ -65,41 +103,44 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
         ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal') # plot the filtered subset of data
         ax1.plot(filtered['x2'], -filtered['x3'], marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
 
-        for i in range(len(lines)):
-            ax1.plot(lpts[i]['x2'], lpts[i]['x1'], marker='o', color=lcolors[i], linestyle='none', label=f'comp. {lnames[i]}') # plot the fitted points
-            ax1.plot(lpts[i]['x2'], -lpts[i]['x3'], marker='o', markerfacecolor='none', markeredgecolor=lcolors[i], markeredgewidth=1.5, linestyle='none')
-            lstart = lsegs[i][0]
-            lend = lsegs[i][1]
-            ax1.plot([lstart[1], lend[1]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5) # plot the principal component
-            ax1.plot([lstart[1], lend[1]], [-lstart[2], -lend[2]], color=lcolors[i], lw=3, alpha=0.5)
+        if lines:
+            for i in range(len(lines)):
+                ax1.plot(lpts[i]['x2'], lpts[i]['x1'], marker='o', color=lcolors[i], linestyle='none', label=f'comp. {lnames[i]}') # plot the fitted points
+                ax1.plot(lpts[i]['x2'], -lpts[i]['x3'], marker='o', markerfacecolor='none', markeredgecolor=lcolors[i], markeredgewidth=1.5, linestyle='none')
+                lstart = lsegs[i][0]
+                lend = lsegs[i][1]
+                ax1.plot([lstart[1], lend[1]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5) # plot the principal component
+                ax1.plot([lstart[1], lend[1]], [-lstart[2], -lend[2]], color=lcolors[i], lw=3, alpha=0.5)
 
         x_lim = ax1.get_xlim()
         y_lim = ax1.get_ylim()
-        for i, (y, x) in enumerate(zip(data['x2'], data['x1'])):
-            x_offset = 0.01 * (x_lim[1] - x_lim[0])
-            y_offset = 0.01 * (y_lim[1] - y_lim[0])
-            ax1.text(y - x_offset, x + y_offset, str(i), fontsize=7, color='k', ha='right', va='bottom') # plot axes labels
-        for i, (y, z) in enumerate(zip(data['x2'], -data['x3'])):
-            y_offset = 0.01 * (y_lim[1] - y_lim[0])
-            z_offset = 0.01 * (x_lim[1] - x_lim[0])
-            ax1.text(y + z_offset, z + y_offset, str(i), fontsize=7, color='grey', ha='left', va='bottom')
-        ax1.annotate(f"{Y}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
-        ax1.annotate(f"{X}, {negZ}", xy=(-0.1*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
+        x_offset = 0.015 * (x_lim[1] - x_lim[0]) 
+        y_offset = 0.01 * (y_lim[1] - y_lim[0])
+        for i, (x, y) in enumerate(zip(data['x2'], data['x1'])):
+            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='k', ha='center', va='center')  # plot axes labels
+            annotations.append(ann)
+            annotation_positions.append((x, y))
+        for i, (x, y) in enumerate(zip(data['x2'], -data['x3'])):
+            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='grey', ha='center', va='center')
+            annotations.append(ann)
+            annotation_positions.append((x, y))
+        ax1.set_xlabel(f"{Y}", loc='right')
+        ax1.set_ylabel(f"{X}  {negZ}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
 
-    xticks = [tick for tick in ax1.get_xticks() if tick != 0]
-    yticks = [tick for tick in ax1.get_yticks() if tick != 0]
-    ax1.set_xticks(xticks[::2])
-    ax1.set_yticks(yticks[::2]) 
+    ax1, tick_unit = get_scaled_axes(ax1)
+    ax1.set_xticklabels([])
+    ax1.set_yticklabels([])
+    xmax = ax1.get_xlim()[1]
+    ymax = ax1.get_ylim()[1]
+    ax1.text(xmax, tick_unit*0.1, f"ticks: {tick_unit:.1e} A/m", ha='right', va='center', fontsize=9)
     
-    ax1.axhline(0, color='k',linewidth=0.8)  
-    ax1.axvline(0, color='k',linewidth=0.8)
     ax1.spines['left'].set_position('zero')
     ax1.spines['bottom'].set_position('zero')
     ax1.spines['right'].set_visible(False)
     ax1.spines['top'].set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
     if labels:  # Only call legend if there are labels
-        ax1.legend()
+        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.53, 1))
     
     ax2 = fig.add_subplot(gs[:2, 1])  # plot stereonet
     plot_net()
@@ -108,31 +149,45 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
     plot_di(dec=[x for x in filtered['dec']], inc=[x for x in filtered['inc']], markersize=50)     # plot the filtered data
     plot_di(dec=filtered['dec'].iloc[0], inc=filtered['inc'].iloc[0], marker='+', markersize=200)
 
-    for i in range(len(lines)):
-        ldir = pro.to_sph([ldirs[i]])
-        plot_di_mean(dec=ldir[0][0], inc=ldir[0][1], a95=lmads[i], marker='*', markersize=75, color=lcolors[i], alpha=0.75, label=f'comp. {lnames[i]}') # plot the linear fits
+    if lines:
+        for i in range(len(lines)):
+            ldir = pro.to_sph([ldirs[i]])
+            plot_di_mean(dec=ldir[0][0], inc=ldir[0][1], a95=lmads[i], marker='*', markersize=75, color=lcolors[i], alpha=0.75, label=f'comp. {lnames[i]}') # plot the linear fits
 
-    for i in range(len(planes)):
-        ndir = pro.to_sph([ndirs[i]])
-        plot_di_mean(dec=ndir[0][0], inc=ndir[0][1], a95=gcmads[i], marker='D', markersize=25, color=gccolors[i], label=f'GC {gcnames[i]}') # plot the gc fits
-        gcsegdirs = pro.to_sph(gcsegs[i])
-        dn_pts = gcsegdirs[gcsegdirs[:, 1] > 0]
-        up_pts = gcsegdirs[gcsegdirs[:, 1] < 0]
-        plot_di(dec=[x for x in dn_pts[:,0]], inc=[x for x in dn_pts[:,1]], markersize=0.2, alpha=0.75, color=gccolors[i])
-        plot_di(dec=[x for x in up_pts[:,0]], inc=[x for x in up_pts[:,1]], markersize=0.2, alpha=0.25, color=gccolors[i])
+    if planes:
+        for i in range(len(planes)):
+            ndir = pro.to_sph([ndirs[i]])
+            plot_di_mean(dec=ndir[0][0], inc=ndir[0][1], a95=gcmads[i], marker='D', markersize=25, color=gccolors[i], label=f'GC {gcnames[i]}') # plot the gc fits
+            gcsegdirs = pro.to_sph(gcsegs[i])
+            dn_pts = gcsegdirs[gcsegdirs[:, 1] > 0]
+            up_pts = gcsegdirs[gcsegdirs[:, 1] < 0]
+            plot_di(dec=[x for x in dn_pts[:,0]], inc=[x for x in dn_pts[:,1]], markersize=0.2, alpha=0.75, color=gccolors[i])
+            plot_di(dec=[x for x in up_pts[:,0]], inc=[x for x in up_pts[:,1]], markersize=0.2, alpha=0.25, color=gccolors[i])
 
     handles, labels = ax2.get_legend_handles_labels()
     if labels:  # Only call legend if there are labels
         ax2.legend(loc='upper right', fontsize=12, markerscale=1.25)
-    ax2.text(0.05, 0.95, f"{data['coordinates'][0]}\ncoordinates", transform=ax2.transAxes, fontsize=12, ha='left', va='top', color='black')
+    ax2.text(0.05, 0.20, f"{data['coordinates'][0]}\ncoordinates", transform=ax2.transAxes, fontsize=12, ha='left', va='top', color='black')
     
     ax3 = fig.add_subplot(gs[2:3, 1])   # plot the remanence decay plot
-    ax3.plot(data['treatment'], data['res']/filtered['res'].max(), marker='o', markersize=4, color='k', alpha=0.25)
-    ax3.plot(filtered['treatment'], filtered['res']/filtered['res'].max(), marker='o', markersize=4, color='k')
+    mnorm = filtered['res'].max()
+    ax3.plot(data['treatment'], data['res']/mnorm, marker='o', markersize=4, color='k', alpha=0.25)
+    ax3.plot(filtered['treatment'], filtered['res']/mnorm, marker='o', markersize=4, color='k')
+    if lines:
+        for i in range(len(lines)):
+            ax3.plot(lpts[i]['treatment'], lpts[i]['res']/mnorm, marker='o', linestyle='None', markersize=5, color=lcolors[i])
+    if planes:
+        for i in range(len(planes)):
+            ax3.plot([gcpts[i].iloc[0]['treatment'], gcpts[i].iloc[-1]['treatment']], [0.5, 0.5], linestyle='--', color=gccolors[i], alpha=0.5, zorder=0, label=f'GC {gcnames[i]}')
     ax3.tick_params(axis='y', which='both', direction='in', length=6, labelleft=False, labelbottom=False)
     ax3.grid(which='both', axis='y', linestyle='--', color='gray', linewidth=0.5)
     ax3.set_xlabel('Treatment')
     ax3.set_ylabel('Normalized intensity')
+    handles, labels = ax3.get_legend_handles_labels()
+    if labels:  # only call legend if there are labels
+        ax3.legend(loc='upper right')
+
+    print ('plot elapsed:', time.time() - time1)
 
     plt.show();
 
@@ -162,12 +217,8 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
         ax1.plot(fitted[:,1], fitted[:,0], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', label='modelled')
         ax1.plot(fitted[:,2], fitted[:,0], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', markerfacecolor='white')
 
-        x_lim = ax1.get_xlim()
-        y_lim = ax1.get_ylim()
-        x_offset = 0.01 * (x_lim[1] - x_lim[0])
-        y_offset = 0.01 * (y_lim[1] - y_lim[0])
-        ax1.annotate(f"{Y}, {Z}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
-        ax1.annotate(f"{X}", xy=(2*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
+        ax1.set_xlabel(f"{Y}, {Z}", loc='right')
+        ax1.set_ylabel(f"{X}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
         
     if projection=='N/Up v. E':
         ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
@@ -177,20 +228,16 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
         ax1.plot(fitted[:,1], fitted[:,0], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', label='modelled')
         ax1.plot(fitted[:,1], -fitted[:,2], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', markerfacecolor='white')
 
-        x_lim = ax1.get_xlim()
-        y_lim = ax1.get_ylim()
-        x_offset = 0.01 * (x_lim[1] - x_lim[0])
-        y_offset = 0.01 * (y_lim[1] - y_lim[0])
-        ax1.annotate(f"{Y}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
-        ax1.annotate(f"{X}, {negZ}", xy=(-0.1*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
+        ax1.set_xlabel(f"{Y}", loc='right')
+        ax1.set_ylabel(f"{X}  {negZ}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
 
-    xticks = [tick for tick in ax1.get_xticks() if tick != 0]
-    yticks = [tick for tick in ax1.get_yticks() if tick != 0]
-    ax1.set_xticks(xticks[::2])
-    ax1.set_yticks(yticks[::2]) 
+    ax1, tick_unit = get_scaled_axes(ax1)
+    ax1.set_xticklabels([])
+    ax1.set_yticklabels([])
+    xmax = ax1.get_xlim()[1]
+    ymax = ax1.get_ylim()[1]
+    ax1.text(xmax, tick_unit*0.1, f"ticks: {tick_unit:.1e} A/m", ha='right', va='center', fontsize=9)
     
-    ax1.axhline(0, color='k',linewidth=0.8)  
-    ax1.axvline(0, color='k',linewidth=0.8)
     ax1.spines['left'].set_position('zero')
     ax1.spines['bottom'].set_position('zero')
     ax1.spines['right'].set_visible(False)
@@ -213,12 +260,8 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
             ax2.quiver(arrow_start[2], arrow_start[0], ldirs_scaled[i][2], ldirs_scaled[i][0], angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5)
             arrow_start += ldirs_scaled[i][:3]
 
-        x_lim = ax2.get_xlim()
-        y_lim = ax2.get_ylim()
-        x_offset = 0.01 * (x_lim[1] - x_lim[0])
-        y_offset = 0.01 * (y_lim[1] - y_lim[0])
-        ax2.annotate(f"{Y}, {Z}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
-        ax2.annotate(f"{X}", xy=(2*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
+        ax2.set_xlabel(f"{Y}, {Z}", loc='right')
+        ax2.set_ylabel(f"{X}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
         
     if projection=='N/Up v. E':
         ax2.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
@@ -231,17 +274,15 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
             ax2.quiver(arrow_start[1], -arrow_start[2], ldirs_scaled[i][1], -ldirs_scaled[i][2], angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5)
             arrow_start += ldirs_scaled[i][:3]
 
-        x_lim = ax2.get_xlim()
-        y_lim = ax2.get_ylim()
-        x_offset = 0.01 * (x_lim[1] - x_lim[0])
-        y_offset = 0.01 * (y_lim[1] - y_lim[0])
-        ax2.annotate(f"{Y}", xy=(x_lim[1] - x_offset, 2*y_offset), ha='center', va='center', fontsize=12, color='k')
-        ax2.annotate(f"{X}, {negZ}", xy=(-0.1*x_offset, y_lim[1] + 2*y_offset), ha='center', va='center', fontsize=12, color='k')
+        ax2.set_xlabel(f"{Y}", loc='right')
+        ax2.set_ylabel(f"{X}  {negZ}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
 
-    xticks = [tick for tick in ax2.get_xticks() if tick != 0]
-    yticks = [tick for tick in ax2.get_yticks() if tick != 0]
-    ax2.set_xticks(xticks[::2])
-    ax2.set_yticks(yticks[::2]) 
+    ax2, tick_unit = get_scaled_axes(ax2)
+    ax2.set_xticklabels([])
+    ax2.set_yticklabels([])
+    xmax = ax2.get_xlim()[1]
+    ymax = ax2.get_ylim()[1]
+    ax2.text(xmax, tick_unit*0.1, f"ticks: {tick_unit:.1e} A/m", ha='right', va='center', fontsize=9)
     
     ax2.axhline(0, color='k',linewidth=0.8)  
     ax2.axvline(0, color='k',linewidth=0.8)
@@ -309,14 +350,29 @@ def interactive_zij_plt(coordinates, data, filtered, lines, planes, show_lines='
                 return  # skipped if plane is perfectly horizontal
             fig.add_trace(pgo.Surface(x=xpl, y=ypl, z=zpl, colorscale=[[0, 'purple'], [1, 'purple']], opacity=0.2, showscale=False))
 
-    z_min = data['x3'].min()
-    z_max = data['x3'].max()
-    if z_min > 0: z_min = 0 
-    if z_max < 0: z_max = 0 
-    z_range = [z_max, z_min] # invert Z-axis range
+    xarr = data['x2'].values
+    xarr = np.append(xarr, 0)
+    yarr = data['x1'].values
+    yarr = np.append(yarr, 0)
+    zarr = data['x3'].values
+    zarr = np.append(zarr, 0)
+
+    x_span = xarr.max()-xarr.min()
+    y_span = yarr.max()-yarr.min()
+    z_span = zarr.max()-zarr.min()
+    max_span = max(x_span, y_span, z_span)
+
+    x_mid = x_span / 2
+    y_mid = y_span / 2
+    z_mid = z_span / 2
     
-    fig.update_layout(scene=dict(xaxis_title=Y, yaxis_title=X, zaxis_title=Z, zaxis=dict(range=z_range), aspectmode="cube"), 
-                      width=1200, height=800, margin=dict(l=20, r=20, t=15, b=15), legend=dict(font=dict(size=14), x=0.90,  y=0.90))
+    x_range = [x_mid - max_span / 2, x_mid + max_span / 2]
+    y_range = [y_mid - max_span / 2, y_mid + max_span / 2]
+    z_range = [z_mid + max_span / 2, z_mid - max_span / 2]
+    
+    fig.update_layout(scene=dict(xaxis_title=Y, yaxis_title=X, zaxis_title=Z, xaxis=dict(range=x_range), yaxis=dict(range=y_range), zaxis=dict(range=z_range),
+                                 aspectmode="manual", aspectratio=dict(x=1, y=1, z=1)),
+                                 width=1200, height=800, margin=dict(l=20, r=20, t=15, b=15), legend=dict(font=dict(size=14), x=0.90,  y=0.90))
     
     fig.show()
 
