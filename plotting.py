@@ -3,23 +3,25 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.graph_objects as pgo
 import processing as pro
-
 import plotly.io as pio
 pio.renderers.default = "iframe"
 
-import time
-
-def get_scaled_axes(ax):
+def get_scaled_axes(ax, xmin, xmax, ymin, ymax):
+    """ ... """
 
     #ensure that both ranges include zero
-    xmin, xmax = ax.get_xlim()
-    ymin, ymax = ax.get_ylim()
     xmin, xmax = min(xmin, 0), max(xmax, 0)
     ymin, ymax = min(ymin, 0), max(ymax, 0)
 
+    xmargin = (xmax-xmin)*0.05
+    ymargin = (ymax-ymin)*0.05
+
+    xmin2, xmax2 = xmin-xmargin, xmax+xmargin
+    ymin2, ymax2 = ymin-ymargin, ymax+ymargin
+
     # find the larger range, get means and set new ranges
-    max_range = max(abs(xmax-xmin), abs(ymax-ymin))
-    xmean, ymean = (xmax+xmin) / 2, (ymax+ymin) / 2
+    max_range = max(abs(xmax2-xmin2), abs(ymax2-ymin2))
+    xmean, ymean = (xmax2+xmin2) / 2, (ymax2+ymin2) / 2
     xrange = [xmean-max_range/2, xmean+max_range/2]
     yrange = [ymean-max_range/2, ymean+max_range/2]
 
@@ -40,6 +42,57 @@ def get_scaled_axes(ax):
 
     return ax, tick_unit
 
+def coord_vars(coordinates):
+    """ ... """
+    if coordinates == 'specimen':
+        X, negX, Y, Z, negZ = 'X', '-X', 'Y', 'Z', '-Z'
+    elif coordinates in ['geographic', 'tectonic']:
+        X, negX, Y, Z, negZ = 'N', 'S', 'E', 'Down', 'Up'
+
+    return X, negX, Y, Z, negZ
+       
+def proj_vars(projection, X, negX, Y, Z, negZ):
+    """ ... """
+    if projection=='N v. E/Dn':
+        Hx, Hy = 'x2', 'x1'
+        Vx, Vy = 'x3', 'x1'
+        lHx, lHy = 1, 0
+        lVx, lVy = 2, 0
+        hxs, vxs, vys = 1, 1, 1
+        xlab = f"{Y}, {Z}"
+        ylab = f"{X}"
+
+    elif projection=='N/Up v. E':
+        Hx, Hy = 'x2', 'x1'
+        Vx, Vy = 'x2', 'x3'  
+        lHx, lHy = 1, 0
+        lVx, lVy = 1, 2      
+        hxs, vxs, vys = 1, 1, -1
+        xlab = f"{Y}"
+        ylab = f"{X}  {negZ}"
+
+    elif projection=='E v. S/Dn':
+        Hx, Hy = 'x1', 'x2'
+        Vx, Vy = 'x3', 'x2'  
+        lHx, lHy = 0, 1
+        lVx, lVy = 2, 1      
+        hxs, vxs, vys = -1, 1, 1
+        xlab = f"{negX}, {Z}"
+        ylab = f"{Y}"
+
+    elif projection=='E/Up v. S':
+        Hx, Hy = 'x1', 'x2'
+        Vx, Vy = 'x1', 'x3'  
+        lHx, lHy = 0, 1
+        lVx, lVy = 0, 2   
+        hxs, vxs, vys = -1, -1, -1
+        xlab = f"{negX}"
+        ylab = f"{Y}  {negZ}"
+
+    else: print ('projection not found')
+
+    return Hx, Hy, Vx, Vy, lHx, lHy, lVx, lVy, hxs, vxs, vys, xlab, ylab
+
     
 ############# specimen-level plots #############
 
@@ -48,12 +101,8 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
     Makes an orthogonal vector (e.g. Zijderveld) plot together with a stereoplot and a remanence decay plot.
     """
 
-    time1 = time.time()
-    
-    if coordinates == 'specimen':
-        X, Y, Z, negZ = 'X', 'Y', 'Z', '-Z'
-    elif coordinates in ['geographic', 'tectonic']:
-        X, Y, Z, negZ = 'N', 'E', 'Down', 'Up'
+    X, negX, Y, Z, negZ = coord_vars(coordinates)
+    Hx, Hy, Vx, Vy, lHx, lHy, lVx, lVy, hxs, vxs, vys, xlab, ylab = proj_vars(projection, X, negX, Y, Z, negZ)
         
     if lines:
         lnames, lpts, ldirs, lmads, lsegs, lcolors = zip(*[(line[1], line[2], line[5], line[6], line[7], line[9]) for line in lines])
@@ -66,72 +115,42 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
     gs = fig.add_gridspec(3, 2)
     
     ax1 = fig.add_subplot(gs[:3, 0]) # make the zijderveld diagram
+      
+    ax1.plot(data[Hx]*hxs, data[Hy], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0) # plot all the data
+    ax1.plot(data[Vx]*vxs, data[Vy]*vys, marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
+    ax1.plot(filtered[Hx]*hxs, filtered[Hy], marker='o', color='k', linewidth=0.5,  label='horizontal')  # plot the filtered subset of data
+    ax1.plot(filtered[Vx]*vxs, filtered[Vy]*vys, marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
+
+    xmin, xmax = min(min(data[Hx]*hxs), min(data[Vx]*vxs)), max(max(data[Hx]*hxs), max(data[Vx]*vxs))
+    ymin, ymax = min(min(data[Hy]), min(data[Vy]*vys)), max(max(data[Hy]), max(data[Vy]*vys))
+    ax1, tick_unit = get_scaled_axes(ax1, xmin, xmax, ymin, ymax)
     
-    if projection=='N v. E/Dn':  
-        ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0) # plot all the data
-        ax1.plot(data['x3'], data['x1'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal')  # plot the filtered subset of data
-        ax1.plot(filtered['x3'], filtered['x1'], marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
+    if lines:
+        for i in range(len(lines)):
+            ax1.plot(lpts[i][Hx]*hxs, lpts[i][Hy], marker='o', color=lcolors[i], linestyle='none', label=f'comp. {lnames[i]}') # plot the fitted points
+            ax1.plot(lpts[i][Vx]*vxs, lpts[i][Vy]*vys, marker='o', markerfacecolor='none', markeredgecolor=lcolors[i], markeredgewidth=1.5, linestyle='none')
+            lstart, lend = lsegs[i][0], lsegs[i][1]
+            ax1.plot([lstart[lHx]*hxs, lend[lHx]*hxs], [lstart[lHy], lend[lHy]], color=lcolors[i], lw=3, alpha=0.5) # plot the principal component
+            ax1.plot([lstart[lVx]*vxs, lend[lVx]*vxs], [lstart[lVy]*vys, lend[lVy]*vys], color=lcolors[i], lw=3, alpha=0.5)
 
-        if lines:
-            for i in range(len(lines)):
-                ax1.plot(lpts[i]['x2'], lpts[i]['x1'], marker='o', color=lcolors[i], linestyle='none', label=f'comp. {lnames[i]}') # plot the fitted points
-                ax1.plot(lpts[i]['x3'], lpts[i]['x1'], marker='o', markerfacecolor='none', markeredgecolor=lcolors[i], markeredgewidth=1.5, linestyle='none')
-                lstart = lsegs[i][0]
-                lend = lsegs[i][1]
-                ax1.plot([lstart[1], lend[1]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5) # plot the principal component
-                ax1.plot([lstart[2], lend[2]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5)
+    x_lim = ax1.get_xlim()
+    y_lim = ax1.get_ylim()
+    x_offset = 0.015 * (x_lim[1] - x_lim[0]) 
+    y_offset = 0.01 * (y_lim[1] - y_lim[0])
+    for i, (x, y) in enumerate(zip(data[Hx]*hxs, data[Hy])):
+        ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='k', ha='center', va='center')  # plot axes labels
+        annotations.append(ann)
+        annotation_positions.append((x, y))
+    for i, (x, y) in enumerate(zip(data[Vx]*vxs, data[Vy]*vys)):
+        ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='grey', ha='center', va='center')
+        annotations.append(ann)
+        annotation_positions.append((x, y))
+    ax1.set_xlabel(f"{xlab}", loc='right')
+    ax1.set_ylabel(f"{ylab}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
 
-        x_lim = ax1.get_xlim()
-        y_lim = ax1.get_ylim()
-        x_offset = 0.015 * (x_lim[1] - x_lim[0]) 
-        y_offset = 0.01 * (y_lim[1] - y_lim[0])
-        for i, (x, y) in enumerate(zip(data['x2'], data['x1'])):
-            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='k', ha='center', va='center')  # plot axes labels
-            annotations.append(ann)
-            annotation_positions.append((x, y))
-        for i, (x, y) in enumerate(zip(data['x3'], data['x1'])):
-            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='grey', ha='center', va='center')
-            annotations.append(ann)
-            annotation_positions.append((x, y))
-        ax1.set_xlabel(f"{Y}, {Z}", loc='right')
-        ax1.set_ylabel(f"{X}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
-        
-    if projection=='N/Up v. E':
-        ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0) # plot all the data
-        ax1.plot(data['x2'], -data['x3'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal') # plot the filtered subset of data
-        ax1.plot(filtered['x2'], -filtered['x3'], marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
-
-        if lines:
-            for i in range(len(lines)):
-                ax1.plot(lpts[i]['x2'], lpts[i]['x1'], marker='o', color=lcolors[i], linestyle='none', label=f'comp. {lnames[i]}') # plot the fitted points
-                ax1.plot(lpts[i]['x2'], -lpts[i]['x3'], marker='o', markerfacecolor='none', markeredgecolor=lcolors[i], markeredgewidth=1.5, linestyle='none')
-                lstart = lsegs[i][0]
-                lend = lsegs[i][1]
-                ax1.plot([lstart[1], lend[1]], [lstart[0], lend[0]], color=lcolors[i], lw=3, alpha=0.5) # plot the principal component
-                ax1.plot([lstart[1], lend[1]], [-lstart[2], -lend[2]], color=lcolors[i], lw=3, alpha=0.5)
-
-        x_lim = ax1.get_xlim()
-        y_lim = ax1.get_ylim()
-        x_offset = 0.015 * (x_lim[1] - x_lim[0]) 
-        y_offset = 0.01 * (y_lim[1] - y_lim[0])
-        for i, (x, y) in enumerate(zip(data['x2'], data['x1'])):
-            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='k', ha='center', va='center')  # plot axes labels
-            annotations.append(ann)
-            annotation_positions.append((x, y))
-        for i, (x, y) in enumerate(zip(data['x2'], -data['x3'])):
-            ann = ax1.text(x + y_offset, y + x_offset, str(i), fontsize=7, color='grey', ha='center', va='center')
-            annotations.append(ann)
-            annotation_positions.append((x, y))
-        ax1.set_xlabel(f"{Y}", loc='right')
-        ax1.set_ylabel(f"{X}  {negZ}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
-
-    ax1, tick_unit = get_scaled_axes(ax1)
     ax1.set_xticklabels([])
     ax1.set_yticklabels([])
     xmax = ax1.get_xlim()[1]
-    ymax = ax1.get_ylim()[1]
     ax1.text(xmax, tick_unit*0.1, f"ticks: {tick_unit:.1e} A/m", ha='right', va='center', fontsize=9)
     
     ax1.spines['left'].set_position('zero')
@@ -187,17 +206,14 @@ def zij_plt(coordinates, projection, data, filtered, lines, planes):
     if labels:  # only call legend if there are labels
         ax3.legend(loc='upper right')
 
-    print ('plot elapsed:', time.time() - time1)
-
     return fig
 
 
 def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficients, coefficients_norm):
+    """ ... """
 
-    if coordinates == 'specimen':
-        X, Y, Z, negZ = 'X', 'Y', 'Z', '-Z'
-    if coordinates == 'geographic' or coordinates == 'tectonic':
-        X, Y, Z, negZ = 'N', 'E', 'Down', 'Up'
+    X, negX, Y, Z, negZ = coord_vars(coordinates)
+    Hx, Hy, Vx, Vy, lHx, lHy, lVx, lVy, hxs, vxs, vys, xlab, ylab = proj_vars(projection, X, negX, Y, Z, negZ)
     
     lnames, ldirs, lcolors = [], [], []
     for i in range(len(lines)): 
@@ -209,33 +225,23 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
     gs = fig.add_gridspec(3, 2)
     
     ax1 = fig.add_subplot(gs[:3, 0])
-    if projection=='N v. E/Dn':  
-        ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax1.plot(data['x3'], data['x1'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal')
-        ax1.plot(filtered['x3'], filtered['x1'], marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
-        ax1.plot(fitted[:,1], fitted[:,0], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', label='modelled')
-        ax1.plot(fitted[:,2], fitted[:,0], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', markerfacecolor='white')
+    ax1.plot(data[Hx]*hxs, data[Hy], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
+    ax1.plot(data[Vx]*vxs, data[Vy]*vys, marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
+    ax1.plot(filtered[Hx]*hxs, filtered[Hy], marker='o', color='k', linewidth=0.5,  label='horizontal')
+    ax1.plot(filtered[Vx]*vxs, filtered[Vy]*vys, marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
+    ax1.plot(fitted[:,lHx]*hxs, fitted[:,lHy], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', label='modelled')
+    ax1.plot(fitted[:,lVx]*vxs, fitted[:,lVy]*vys, marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', markerfacecolor='white')
 
-        ax1.set_xlabel(f"{Y}, {Z}", loc='right')
-        ax1.set_ylabel(f"{X}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
+    ax1.set_xlabel(f"{xlab}", loc='right')
+    ax1.set_ylabel(f"{ylab}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
         
-    if projection=='N/Up v. E':
-        ax1.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax1.plot(data['x2'], -data['x3'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax1.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5,  label='horizontal')
-        ax1.plot(filtered['x2'], -filtered['x3'], marker='o', color='k', linewidth=0.5, markerfacecolor='white', label='vertical')
-        ax1.plot(fitted[:,1], fitted[:,0], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', label='modelled')
-        ax1.plot(fitted[:,1], -fitted[:,2], marker='o', markersize=3, color='purple', linewidth=0.25, linestyle='dashed', markerfacecolor='white')
-
-        ax1.set_xlabel(f"{Y}", loc='right')
-        ax1.set_ylabel(f"{X}  {negZ}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
-
-    ax1, tick_unit = get_scaled_axes(ax1)
+    xmin, xmax = min(min(data[Hx]*hxs), min(data[Vx]*vxs)), max(max(data[Hx]*hxs), max(data[Vx]*vxs))
+    ymin, ymax = min(min(data[Hy]), min(data[Vy]*vys)), max(max(data[Hy]), max(data[Vy]*vys))
+    ax1, tick_unit = get_scaled_axes(ax1, xmin, xmax, ymin, ymax)
+    
     ax1.set_xticklabels([])
     ax1.set_yticklabels([])
     xmax = ax1.get_xlim()[1]
-    ymax = ax1.get_ylim()[1]
     ax1.text(xmax, tick_unit*0.1, f"ticks: {tick_unit:.1e} A/m", ha='right', va='center', fontsize=9)
     
     ax1.spines['left'].set_position('zero')
@@ -249,43 +255,28 @@ def linzij_plt(coordinates, projection, data, filtered, lines, fitted, coefficie
     ldirs_scaled = [ldir * a for ldir, a in zip(ldirs, coefficients[0])]
     arrow_start = np.zeros(3, dtype=float)
     
-    if projection=='N v. E/Dn':  
-        ax2.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax2.plot(data['x3'], data['x1'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax2.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5)
-        ax2.plot(filtered['x3'], filtered['x1'], marker='o', color='k', linewidth=0.5, markerfacecolor='white')        
-        
-        for i in range(len(ldirs)-1,-1,-1):
-            ax2.quiver(arrow_start[1], arrow_start[0], ldirs_scaled[i][1], ldirs_scaled[i][0], angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5, label=f'comp. {lnames[i]}')
-            ax2.quiver(arrow_start[2], arrow_start[0], ldirs_scaled[i][2], ldirs_scaled[i][0], angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5)
-            arrow_start += ldirs_scaled[i][:3]
+    ax2.plot(data[Hx]*hxs, data[Hy], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
+    ax2.plot(data[Vx]*vxs, data[Vy]*vys, marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
+    ax2.plot(filtered[Hx]*hxs, filtered[Hy], marker='o', color='k', linewidth=0.5)
+    ax2.plot(filtered[Vx]*vxs, filtered[Vy]*vys, marker='o', color='k', linewidth=0.5, markerfacecolor='white')        
+    
+    for i in range(len(ldirs)-1,-1,-1):
+        ax2.quiver(arrow_start[lHx]*hxs, arrow_start[lHy], ldirs_scaled[i][lHx]*hxs, ldirs_scaled[i][lHy], angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5, label=f'comp. {lnames[i]}')
+        ax2.quiver(arrow_start[lVx]*vxs, arrow_start[lVy]*vys, ldirs_scaled[i][lVx]*vxs, ldirs_scaled[i][lVy]*vys, angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5)
+        arrow_start += ldirs_scaled[i][:3]
 
-        ax2.set_xlabel(f"{Y}, {Z}", loc='right')
-        ax2.set_ylabel(f"{X}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
-        
-    if projection=='N/Up v. E':
-        ax2.plot(data['x2'], data['x1'], marker='o', color='k', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax2.plot(data['x2'], -data['x3'], marker='o', color='k',  markerfacecolor='white', linestyle='--', linewidth='0.75', alpha=0.25, zorder=0)
-        ax2.plot(filtered['x2'], filtered['x1'], marker='o', color='k', linewidth=0.5)
-        ax2.plot(filtered['x2'], -filtered['x3'], marker='o', color='k', linewidth=0.5, markerfacecolor='white')
-        
-        for i in range(len(ldirs)-1,-1,-1):
-            ax2.quiver(arrow_start[1], arrow_start[0], ldirs_scaled[i][1], ldirs_scaled[i][0], angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5)
-            ax2.quiver(arrow_start[1], -arrow_start[2], ldirs_scaled[i][1], -ldirs_scaled[i][2], angles='xy', scale_units='xy', scale=1, color=lcolors[i], alpha=0.5)
-            arrow_start += ldirs_scaled[i][:3]
+    ax2.set_xlabel(f"{xlab}", loc='right')
+    ax2.set_ylabel(f"{ylab}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
 
-        ax2.set_xlabel(f"{Y}", loc='right')
-        ax2.set_ylabel(f"{X}  {negZ}", rotation='horizontal', ha='left', va='center', x=0.5, y=0.99)
-
-    ax2, tick_unit = get_scaled_axes(ax2)
+    xmin, xmax = min(min(data[Hx]*hxs), min(data[Vx]*vxs)), max(max(data[Hx]*hxs), max(data[Vx]*vxs))
+    ymin, ymax = min(min(data[Hy]), min(data[Vy]*vys)), max(max(data[Hy]), max(data[Vy]*vys))
+    ax2, tick_unit = get_scaled_axes(ax2, xmin, xmax, ymin, ymax)
+    
     ax2.set_xticklabels([])
     ax2.set_yticklabels([])
     xmax = ax2.get_xlim()[1]
-    ymax = ax2.get_ylim()[1]
     ax2.text(xmax, tick_unit*0.1, f"ticks: {tick_unit:.1e} A/m", ha='right', va='center', fontsize=9)
     
-    ax2.axhline(0, color='k',linewidth=0.8)  
-    ax2.axvline(0, color='k',linewidth=0.8)
     ax2.spines['left'].set_position('zero')
     ax2.spines['bottom'].set_position('zero')
     ax2.spines['right'].set_visible(False)

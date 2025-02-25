@@ -293,7 +293,7 @@ class Interface:
 
     def coordinate_projection_widgets(self):
         """ Widgets controlling coordinate and projection settings """
-        self.projection_dropdown1 = widgets.Dropdown(options=['N v. E/Dn', 'N/Up v. E'], value=self.axes_projection.projection, description='Projection:',
+        self.projection_dropdown1 = widgets.Dropdown(options=['N v. E/Dn', 'N/Up v. E', 'E v. S/Dn', 'E/Up v. S'], value=self.axes_projection.projection, description='Projection:',
                                                 layout=widgets.Layout(width="250px", margin="0px 50px 0px 50px"))
         self.projection_dropdown1.observe(self.update_projections, names='value')
         
@@ -302,7 +302,7 @@ class Interface:
         self.coordinates_dropdown1.observe(self.update_coordinates, names='value')
 
         # this second set of dropdown menus corresponds to the lower plot (but their functionality is bound to the first set)
-        self.projection_dropdown2 = widgets.Dropdown(options=['N v. E/Dn', 'N/Up v. E'], value=self.axes_projection.projection, description='Projection:',
+        self.projection_dropdown2 = widgets.Dropdown(options=['N v. E/Dn', 'N/Up v. E', 'E v. S/Dn', 'E/Up v. S'], value=self.axes_projection.projection, description='Projection:',
                                                 layout=widgets.Layout(width="250px", margin="0px 50px 0px 50px"))
         self.projection_dropdown2.observe(self.update_projections, names='value')
 
